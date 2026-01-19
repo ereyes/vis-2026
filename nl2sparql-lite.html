@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wikidata: Guided NL → SPARQL (Lite)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    label { display: block; font-size: 0.9rem; margin-top: 10px; }
+    input, select, textarea, button { font: inherit; }
+    input, select { padding: 6px 8px; min-width: 240px; }
+    textarea { width: 100%; height: 220px; margin-top: 10px; }
+    button { padding: 8px 12px; }
+    iframe { width: 100%; height: 65vh; border: 1px solid #ccc; margin-top: 12px; }
+    .muted { color: #555; }
+    .error { color: #b00020; white-space: pre-wrap; }
+    code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Guided NL → Wikidata SPARQL (Lite)</h1>
+  <p class="muted">
+    This intentionally supports only a few templates to reduce ambiguity.
+    Entity/property IDs are resolved via <code>action=wbsearchentities</code>.
+  </p>
+
+  <div class="row">
+    <div>
+      <label>Template</label>
+      <select id="template">
+        <option value="people_occ_cit_map">Map people by occupation + citizenship (birthplace coords)</option>
+        <option value="type_in_place">List items of a type in a place</option>
+        <option value="works_by_creator">List works by creator (with optional image)</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="fields"></div>
+
+  <div class="row" style="margin-top: 12px;">
+    <button id="generate">Generate SPARQL + Preview</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <div id="error" class="error"></div>
+  <textarea id="sparql" placeholder="Generated SPARQL will appear here..."></textarea>
+  <iframe id="preview" referrerpolicy="no-referrer"></iframe>
+
+  <script>
+    // --- Wikidata entity/property lookup (Action API) ---
+    // Official doc: action=wbsearchentities supports type=item|property and other params.
+    // For browser use, include origin=* to satisfy CORS requirements on MediaWiki APIs.
+    async function wbSearch({ search, type = "item", language = "en", limit = 5 }) {
+      const url = new URL("https://www.wikidata.org/w/api.php");
+      url.searchParams.set("action", "wbsearchentities");
+      url.searchParams.set("format", "json");
+      url.searchParams.set("search", search);
+      url.searchParams.set("language", language);
+      url.searchParams.set("uselang", language);
+      url.searchParams.set("type", type);
+      url.searchParams.set("limit", String(limit));
+      url.searchParams.set("origin", "*"); // CORS
+
+      const res = await fetch(url.toString(), {
+        headers: { "Accept": "application/json" }
+      });
+      if (!res.ok) throw new Error(`wbsearchentities failed: HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function resolveTopId(label, type) {
+      const data = await wbSearch({ search: label, type, limit: 5 });
+      const top = data.search?.[0];
+      if (!top?.id) throw new Error(`No ${type} found for: "${label}"`);
+      return top.id; // Q... or P...
+    }
+
+    // --- Templates (constrained, slot-based) ---
+    const templates = {
+      people_occ_cit_map: {
+        fields: [
+          { key: "occupation", label: "Occupation (e.g., painter)", type: "item", placeholder: "painter" },
+          { key: "citizenship", label: "Citizenship (e.g., France)", type: "item", placeholder: "France" },
+          { key: "limit", label: "Limit", type: "number", placeholder: "100", default: "100" }
+        ],
+        async build(values) {
+          const occQ = await resolveTopId(values.occupation, "item");
+          const citQ = await resolveTopId(values.citizenship, "item");
+          const limit = Number(values.limit || 100);
+
+          return `#defaultView:Map
+SELECT ?person ?personLabel ?dob ?image ?birthPlace ?birthPlaceLabel ?coord WHERE {
+  ?person wdt:P106 wd:${occQ};
+          wdt:P27  wd:${citQ};
+          wdt:P569 ?dob;
+          wdt:P18  ?image;
+          wdt:P19  ?birthPlace.
+  ?birthPlace wdt:P625 ?coord.
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }
+}
+LIMIT ${limit}`;
+        }
+      },
+
+      type_in_place: {
+        fields: [
+          { key: "typeLabel", label: "Type (e.g., museum, university)", type: "item", placeholder: "museum" },
+          { key: "placeLabel", label: "Place (e.g., Berlin, Japan)", type: "item", placeholder: "Berlin" },
+          { key: "limit", label: "Limit", type: "number", placeholder: "200", default: "200" }
+        ],
+        async build(values) {
+          const typeQ = await resolveTopId(values.typeLabel, "item");
+          const placeQ = await resolveTopId(values.placeLabel, "item");
+          const limit = Number(values.limit || 200);
+
+          return `SELECT ?item ?itemLabel ?coord WHERE {
+  ?item wdt:P31/wdt:P279* wd:${typeQ};
+        wdt:P131         wd:${placeQ}.
+  OPTIONAL { ?item wdt:P625 ?coord. }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }
+}
+LIMIT ${limit}`;
+        }
+      },
+
+      works_by_creator: {
+        fields: [
+          { key: "creator", label: "Creator (e.g., Claude Monet)", type: "item", placeholder: "Claude Monet" },
+          { key: "limit", label: "Limit", type: "number", placeholder: "200", default: "200" }
+        ],
+        async build(values) {
+          const creatorQ = await resolveTopId(values.creator, "item");
+          const limit = Number(values.limit || 200);
+
+          return `SELECT ?work ?workLabel ?image WHERE {
+  ?work wdt:P170 wd:${creatorQ}.
+  OPTIONAL { ?work wdt:P18 ?image. }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }
+}
+LIMIT ${limit}`;
+        }
+      }
+    };
+
+    // --- UI wiring ---
+    const templateSelect = document.getElementById("template");
+    const fieldsDiv = document.getElementById("fields");
+    const generateBtn = document.getElementById("generate");
+    const statusEl = document.getElementById("status");
+    const errorEl = document.getElementById("error");
+    const sparqlTa = document.getElementById("sparql");
+    const preview = document.getElementById("preview");
+
+    function renderFields() {
+      fieldsDiv.innerHTML = "";
+      const t = templates[templateSelect.value];
+      for (const f of t.fields) {
+        const wrap = document.createElement("div");
+        const lab = document.createElement("label");
+        lab.textContent = f.label;
+        wrap.appendChild(lab);
+
+        const input = document.createElement("input");
+        input.id = "field_" + f.key;
+        input.placeholder = f.placeholder || "";
+        input.value = f.default || "";
+        if (f.type === "number") input.type = "number";
+        wrap.appendChild(input);
+
+        fieldsDiv.appendChild(wrap);
+      }
+    }
+
+    async function generate() {
+      errorEl.textContent = "";
+      statusEl.textContent = "Resolving IDs and generating SPARQL…";
+
+      const t = templates[templateSelect.value];
+      const values = {};
+      for (const f of t.fields) {
+        values[f.key] = document.getElementById("field_" + f.key).value.trim();
+      }
+
+      try {
+        const sparql = await t.build(values);
+        sparqlTa.value = sparql;
+
+        // Preview via WDQS embed viewer
+        // (embed.html exists in the WDQS GUI codebase)
+        preview.src = "https://query.wikidata.org/embed.html#" + encodeURIComponent(sparql);
+
+        statusEl.textContent = "Done.";
+      } catch (e) {
+        statusEl.textContent = "Error.";
+        errorEl.textContent = String(e);
+      }
+    }
+
+    templateSelect.addEventListener("change", renderFields);
+    generateBtn.addEventListener("click", generate);
+
+    renderFields();
+  </script>
+</body>
+</html>
