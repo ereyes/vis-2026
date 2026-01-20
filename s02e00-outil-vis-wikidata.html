@@ -1,0 +1,1167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wikidata SPARQL Builder — v4.1 (Dedup + Exports)</title>
+
+  <!-- JSZip for "Download all images" -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <style>
+    :root { --border:#d0d7de; --bg:#fff; --bg2:#f6f8fa; --text:#111; --muted:#555; --danger:#b00020; }
+    body { font-family: system-ui, sans-serif; margin: 16px; color: var(--text); background: var(--bg); }
+    h1 { margin: 0 0 6px 0; font-size: 1.35rem; }
+    .muted { color: var(--muted); }
+    .small { font-size: 0.92rem; }
+    .tiny { font-size: 0.85rem; }
+    code { background: #eef2f6; border-radius: 6px; padding: 2px 6px; }
+
+    .bar {
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+      margin-top:10px; padding:10px; border:1px solid var(--border);
+      border-radius:12px; background:var(--bg2);
+    }
+
+    button {
+      font: inherit; border:1px solid var(--border); border-radius:999px;
+      padding:8px 12px; background:#fff; cursor:pointer; user-select:none;
+    }
+    button.primary.active { border-color:#111; background:#111; color:#fff; }
+    button.option.selected { border-color:#111; background:#111; color:#fff; }
+    button.option.disabled { opacity:0.45; cursor:not-allowed; }
+    button:disabled { opacity:0.55; cursor:not-allowed; }
+
+    .panels {
+      margin-top:12px;
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap:12px;
+    }
+
+    .panel { border:1px solid var(--border); border-radius:12px; padding:12px; background:#fff; }
+    .panel h2 { margin:0 0 8px 0; font-size:1.05rem; }
+    .options { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+
+    .footer {
+      margin-top:14px; border:1px solid var(--border); border-radius:12px;
+      padding:12px; background:var(--bg2);
+    }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+    .pill {
+      display:inline-block; border:1px solid var(--border); border-radius:999px;
+      padding:3px 10px; background:#fff; color:#333;
+    }
+
+    input[type="number"], input[type="text"], select {
+      font: inherit; padding: 8px 10px; border:1px solid var(--border);
+      border-radius:10px; background:#fff;
+    }
+    input[type="number"] { width:140px; }
+    select { min-width:210px; }
+
+    textarea {
+      width:100%; height:260px; border:1px solid var(--border); border-radius:12px;
+      padding:10px; margin-top:10px; background:#fff;
+      font: 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+    }
+
+    iframe { width:100%; height:65vh; border:1px solid var(--border); border-radius:12px; margin-top:12px; background:#fff; }
+    .error { color: var(--danger); white-space: pre-wrap; }
+
+    .subbox { margin-top:10px; padding:10px; border:1px dashed var(--border); border-radius:12px; background:#fff; }
+
+    dialog { border:1px solid var(--border); border-radius:12px; padding:12px; width:min(900px, 95vw); }
+    dialog::backdrop { background: rgba(0,0,0,0.35); }
+    .dialog-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <h1>Wikidata SPARQL Builder</h1>
+  <div class="muted small">
+    Dedup = <code>GROUP BY ?item ?itemLabel</code> + aggregates. Selected fields are required (no <code>OPTIONAL</code>).
+    This version avoids Blazegraph crashes by binding raw variables and aggregating into display variables.
+  </div>
+
+  <div class="bar" id="primaryBar"></div>
+  <div class="panels" id="panels"></div>
+
+  <div class="footer">
+    <div class="row">
+      <button id="runBtn" style="border-radius:12px; padding:10px 14px;">Generate + Run</button>
+      <select id="viewSelect" title="Visualization"></select>
+      <span class="pill" id="domainPill">Possible domains: —</span>
+
+      <label class="tiny muted" style="margin-left:auto;">Limit</label>
+      <input id="limitInput" type="number" min="1" max="5000" value="100" />
+    </div>
+
+    <div class="row">
+      <span class="muted small" id="status">Idle.</span>
+    </div>
+
+    <div class="error" id="error"></div>
+    <textarea id="sparql" spellcheck="false" placeholder="Generated SPARQL will appear here..."></textarea>
+  </div>
+
+  <iframe id="preview" referrerpolicy="no-referrer"></iframe>
+
+  <div class="bar" style="margin-top:10px;" id="actionsBar">
+    <button id="embedBtn" disabled>Embed…</button>
+    <button id="dlHtmlBtn" disabled>Download HTML</button>
+    <button id="dlCsvBtn" disabled>Download CSV</button>
+
+<label class="tiny muted" style="display:flex; align-items:center; gap:6px;">
+  <input type="checkbox" id="jpegCheck" />
+  Convert images to JPG
+</label>
+
+<label class="tiny muted" style="display:flex; align-items:center; gap:6px;">
+  Thumb width
+  <input id="thumbWidthInput" type="number" min="100" max="5000" value="1600" />
+</label>
+
+    <button id="dlImagesBtn" disabled>Download all images</button>
+    <button id="restartBtn">Restart</button>
+    <span class="muted small" id="actionHint"></span>
+  </div>
+
+  <dialog id="embedDialog">
+    <div class="row" style="justify-content:space-between; align-items:baseline;">
+      <div><strong>Embed code (iframe)</strong></div>
+      <div class="muted tiny">Paste into your page</div>
+    </div>
+
+    <label class="tiny muted" style="display:block; margin-top:10px;">Iframe code</label>
+    <textarea id="embedCode" spellcheck="false" style="height:200px;"></textarea>
+
+    <div class="dialog-actions">
+      <button id="copyEmbed">Copy</button>
+      <button id="closeEmbed">Close</button>
+    </div>
+  </dialog>
+
+<script>
+/* Endpoints */
+const WDQS_EMBED = "https://query.wikidata.org/embed.html#";
+const WDQS_ENDPOINT = "https://query.wikidata.org/sparql";
+const WD_API = "https://www.wikidata.org/w/api.php";
+const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
+
+
+/* Views */
+const VIEWS = [
+  { id: "Table", label: "Table", req: (caps) => true },
+  { id: "Map", label: "Map (requires coordinates)", req: (caps) => caps.hasCoord },
+  { id: "ImageGrid", label: "Grid (requires image/logo/flag)", req: (caps) => caps.imageCount > 0 },
+  { id: "Timeline", label: "Timeline (requires a date)", req: (caps) => caps.dateCount > 0 },
+  { id: "BarChart", label: "Bar chart (requires quantity)", req: (caps) => caps.quantityCount > 0 },
+  { id: "LineChart", label: "Line chart (date + quantity)", req: (caps) => caps.quantityCount > 0 && caps.dateCount > 0 },
+  { id: "ScatterChart", label: "Scatter (2+ quantities)", req: (caps) => caps.quantityCount >= 2 }
+];
+
+/* Domains */
+const ALL_DOMAINS = ["city","country","region","film","book","comic","actor","football_player","custom"];
+const DOMAIN_LABEL = {
+  city:"Cities", country:"Countries", region:"Regions",
+  film:"Films", book:"Books", comic:"Comics",
+  actor:"Actors (humans)", football_player:"Football players (humans)",
+  custom:"Custom"
+};
+
+/* Field options now define: var (output), prop, aggFn.
+   Generator binds rawVar in WHERE and aggregates into var in SELECT. */
+const OPTIONS = [
+  // Places (domain)
+  { id:"dom_city", group:"places", kind:"domain", label:"Cities", allowedDomains:["city"] },
+  { id:"dom_country", group:"places", kind:"domain", label:"Countries", allowedDomains:["country"] },
+  { id:"dom_region", group:"places", kind:"domain", label:"Regions", allowedDomains:["region"] },
+
+  // Categories (domain)
+  { id:"dom_film", group:"categories", kind:"domain", label:"Films", allowedDomains:["film"] },
+  { id:"dom_book", group:"categories", kind:"domain", label:"Books", allowedDomains:["book"] },
+  { id:"dom_comic", group:"categories", kind:"domain", label:"Comics", allowedDomains:["comic"] },
+  { id:"dom_actor", group:"categories", kind:"domain", label:"Actors", allowedDomains:["actor"] },
+  { id:"dom_football", group:"categories", kind:"domain", label:"Football players", allowedDomains:["football_player"] },
+
+  { id:"dom_custom", group:"categories", kind:"domain", label:"Custom category (set below)", allowedDomains:["custom"], customGate:true },
+
+  // Images
+  { id:"img_photo", group:"images", kind:"field", label:"Photos", allowedDomains:ALL_DOMAINS,
+    caps:{ image:true }, var:"?image", prop:"P18", aggFn:"SAMPLE"
+  },
+  { id:"img_logo", group:"images", kind:"field", label:"Logos", allowedDomains:["city","country","region","custom"],
+    caps:{ image:true }, var:"?logo", prop:"P154", aggFn:"SAMPLE"
+  },
+  { id:"img_flag", group:"images", kind:"field", label:"Flags", allowedDomains:["country","region","custom"],
+    caps:{ image:true }, var:"?flag", prop:"P41", aggFn:"SAMPLE"
+  },
+
+  // Places (field)
+  { id:"pl_coord", group:"places", kind:"field", label:"Coordinates", allowedDomains:["city","country","region","custom"],
+    caps:{ coord:true }, var:"?coord", prop:"P625", aggFn:"SAMPLE"
+  },
+
+  // Quantities
+  { id:"q_population", group:"quantities", kind:"field", label:"Population", allowedDomains:["city","country","region","custom"],
+    caps:{ quantity:true }, var:"?population", prop:"P1082", aggFn:"MAX"
+  },
+  { id:"q_area", group:"quantities", kind:"field", label:"Area", allowedDomains:["city","country","region","custom"],
+    caps:{ quantity:true }, var:"?area", prop:"P2046", aggFn:"MAX"
+  },
+  { id:"q_height", group:"quantities", kind:"field", label:"Height", allowedDomains:["actor","football_player","custom"],
+    caps:{ quantity:true }, var:"?height", prop:"P2048", aggFn:"MAX"
+  },
+  { id:"q_runtime", group:"quantities", kind:"field", label:"Runtime (films)", allowedDomains:["film","custom"],
+    caps:{ quantity:true }, var:"?runtime", prop:"P2047", aggFn:"MAX"
+  },
+  { id:"q_pages", group:"quantities", kind:"field", label:"Pages (books/comics)", allowedDomains:["book","comic","custom"],
+    caps:{ quantity:true }, var:"?pages", prop:"P1104", aggFn:"MAX"
+  },
+
+  // Dates
+  { id:"d_birth", group:"dates", kind:"field", label:"Birth date", allowedDomains:["actor","football_player","custom"],
+    caps:{ date:true }, var:"?birthDate", prop:"P569", aggFn:"MIN"
+  },
+  { id:"d_death", group:"dates", kind:"field", label:"Date of death", allowedDomains:["actor","football_player","custom"],
+    caps:{ date:true }, var:"?deathDate", prop:"P570", aggFn:"MIN"
+  },
+  { id:"d_inception", group:"dates", kind:"field", label:"Inception date", allowedDomains:["city","country","region","custom"],
+    caps:{ date:true }, var:"?inceptionDate", prop:"P571", aggFn:"MIN"
+  },
+  { id:"d_publication", group:"dates", kind:"field", label:"Publication / release date", allowedDomains:["film","book","comic","custom"],
+    caps:{ date:true }, var:"?publicationDate", prop:"P577", aggFn:"MIN"
+  }
+];
+
+const OPTION_BY_ID = Object.fromEntries(OPTIONS.map(o => [o.id, o]));
+
+const GROUPS = [
+  { id:"images", label:"Images" },
+  { id:"places", label:"Places" },
+  { id:"quantities", label:"Quantities" },
+  { id:"categories", label:"Categories" },
+  { id:"dates", label:"Dates" }
+];
+
+const state = {
+  groupActive: Object.fromEntries(GROUPS.map(g => [g.id, false])),
+  selected: new Set(),
+  running: false,
+  view: "Table",
+  custom: { raw:"", qid:"", label:"", mode:"type" },
+  lastQuery: "",
+  lastJson: null,
+  lastCsv: ""
+};
+
+/* DOM */
+const primaryBar = document.getElementById("primaryBar");
+const panels = document.getElementById("panels");
+const runBtn = document.getElementById("runBtn");
+const limitInput = document.getElementById("limitInput");
+const sparqlEl = document.getElementById("sparql");
+const previewEl = document.getElementById("preview");
+const statusEl = document.getElementById("status");
+const errorEl = document.getElementById("error");
+const domainPill = document.getElementById("domainPill");
+const viewSelect = document.getElementById("viewSelect");
+
+const embedBtn = document.getElementById("embedBtn");
+const dlHtmlBtn = document.getElementById("dlHtmlBtn");
+const dlCsvBtn = document.getElementById("dlCsvBtn");
+const dlImagesBtn = document.getElementById("dlImagesBtn");
+const restartBtn = document.getElementById("restartBtn");
+const actionHint = document.getElementById("actionHint");
+
+const embedDialog = document.getElementById("embedDialog");
+const embedCode = document.getElementById("embedCode");
+const copyEmbed = document.getElementById("copyEmbed");
+const closeEmbed = document.getElementById("closeEmbed");
+
+/* Helpers */
+function setFrom(arr){ return new Set(arr); }
+function intersect(a,b){ const out=new Set(); for(const x of a) if(b.has(x)) out.add(x); return out; }
+function isEmpty(s){ return s.size===0; }
+function saneLimit(x, fallback=100){
+  const n = Number(x);
+  if(!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(Math.floor(n),1),5000);
+}
+function buildEmbedUrl(query){ return WDQS_EMBED + encodeURIComponent(query); }
+function downloadTextFile(filename, mime, data){
+  const blob = data instanceof Blob ? data : new Blob([data], { type:mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function sparqlJsonToCsv(json){
+  const vars = json?.head?.vars || [];
+  const rows = json?.results?.bindings || [];
+  const esc = (v) => {
+    const s = String(v ?? "");
+    const q = /[",\n\r]/.test(s);
+    const e = s.replaceAll('"','""');
+    return q ? `"${e}"` : e;
+  };
+  const out = [];
+  out.push(vars.map(esc).join(","));
+  for(const b of rows){
+    out.push(vars.map(v => esc(b[v]?.value ?? "")).join(","));
+  }
+  return out.join("\n") + "\n";
+}
+function enableActions(enabled){
+  embedBtn.disabled = !enabled;
+  dlHtmlBtn.disabled = !enabled;
+  dlCsvBtn.disabled = !enabled;
+  dlImagesBtn.disabled = !(enabled && hasAnyImageColumn());
+}
+function hasAnyImageColumn(){
+  for(const opt of getSelectedOptions()){
+    if(opt.kind==="field" && opt.caps?.image) return true;
+  }
+  return false;
+}
+function setBusy(b){
+  state.running = b;
+  runBtn.disabled = b;
+  viewSelect.disabled = b;
+  for(const btn of document.querySelectorAll("button.primary, button.option")) btn.disabled = b;
+}
+
+/* Selection logic */
+function getSelectedOptions(){
+  return [...state.selected].map(id => OPTION_BY_ID[id]).filter(Boolean);
+}
+function computePossibleDomains(){
+  const selected = getSelectedOptions();
+  let possible = setFrom(ALL_DOMAINS);
+  for(const opt of selected){
+    possible = intersect(possible, setFrom(opt.allowedDomains));
+  }
+  return possible;
+}
+function optionWouldBeAllowed(opt, possibleDomains){
+  if(opt.customGate && !state.custom.qid) return false;
+  return !isEmpty(intersect(possibleDomains, setFrom(opt.allowedDomains)));
+}
+function selectOption(optionId){
+  const opt = OPTION_BY_ID[optionId];
+  if(!opt) return;
+  if(state.selected.has(optionId)) return;
+
+  const prev = [...state.selected];
+  state.selected.add(optionId);
+
+  let possible = setFrom(opt.allowedDomains);
+  const keep = new Set([optionId]);
+
+  for(const otherId of prev){
+    const other = OPTION_BY_ID[otherId];
+    if(!other) continue;
+    if(other.customGate && !state.custom.qid) continue;
+    const next = intersect(possible, setFrom(other.allowedDomains));
+    if(!isEmpty(next)){
+      keep.add(otherId);
+      possible = next;
+    }
+  }
+  state.selected = keep;
+}
+function toggleOption(optionId){
+  const opt = OPTION_BY_ID[optionId];
+  if(!opt) return;
+
+  if(state.selected.has(optionId)){
+    state.selected.delete(optionId);
+    update();
+    return;
+  }
+
+  const possible = computePossibleDomains();
+  if(!optionWouldBeAllowed(opt, possible)) return;
+
+  selectOption(optionId);
+  update();
+}
+
+/* View compatibility */
+function computeCaps(){
+  const caps = { hasCoord:false, imageCount:0, dateCount:0, quantityCount:0 };
+  for(const opt of getSelectedOptions()){
+    if(opt.kind!=="field") continue;
+    if(opt.caps?.coord) caps.hasCoord = true;
+    if(opt.caps?.image) caps.imageCount += 1;
+    if(opt.caps?.date) caps.dateCount += 1;
+    if(opt.caps?.quantity) caps.quantityCount += 1;
+  }
+  return caps;
+}
+function computeViewCompatibility(){
+  const caps = computeCaps();
+  const compat = {};
+  for(const v of VIEWS) compat[v.id] = !!v.req(caps);
+  return compat;
+}
+function firstCompatibleView(compat){
+  for(const v of VIEWS) if(compat[v.id]) return v.id;
+  return "Table";
+}
+
+/* Domain patterns */
+function domainWherePattern(domainKey){
+  switch(domainKey){
+    case "city": return `?item wdt:P31/wdt:P279* wd:Q515 .`;
+    case "country": return `?item wdt:P31/wdt:P279* wd:Q6256 .`;
+    case "region": return `?item wdt:P31/wdt:P279* wd:Q82794 .`;
+    case "film": return `?item wdt:P31/wdt:P279* wd:Q11424 .`;
+    case "book": return `?item wdt:P31/wdt:P279* wd:Q571 .`;
+    case "comic": return `?item wdt:P31/wdt:P279* wd:Q1004 .`;
+    case "actor": return `?item wdt:P31 wd:Q5 ; wdt:P106/wdt:P279* wd:Q33999 .`;
+    case "football_player": return `?item wdt:P31 wd:Q5 ; wdt:P106/wdt:P279* wd:Q937857 .`;
+    case "custom":
+      if(!state.custom.qid) throw new Error("Custom category not set. Enter a category and click Apply.");
+      if(state.custom.mode === "occupation"){
+        return `?item wdt:P31 wd:Q5 ; wdt:P106/wdt:P279* wd:${state.custom.qid} .`;
+      }
+      return `?item wdt:P31/wdt:P279* wd:${state.custom.qid} .`;
+    default: return null;
+  }
+}
+function getChosenDomain(possibleDomains){
+  const selected = getSelectedOptions();
+  const domainOpt = selected.find(o => o.kind==="domain");
+  if(domainOpt) return domainOpt.allowedDomains[0];
+  if(possibleDomains.size===1) return [...possibleDomains][0];
+  return null;
+}
+
+/* IMPORTANT FIX:
+   Bind raw variables in WHERE, aggregate into output variable names in SELECT.
+   This prevents (MIN(?x) AS ?x) where ?x was already bound. */
+function rawVarFor(outVar){
+  // outVar is like "?birthDate"
+  const base = outVar.replace(/^\?/, "");
+  return "?" + base + "Raw";
+}
+
+function buildSparql(){
+  const possibleDomains = computePossibleDomains();
+  const domain = getChosenDomain(possibleDomains);
+
+  if(!domain){
+    const list = [...possibleDomains].map(d => DOMAIN_LABEL[d] || d).join(", ");
+    throw new Error(possibleDomains.size
+      ? `Choose one domain (e.g., Films, Cities). Currently possible: ${list}`
+      : `No compatible domain remains. Deselect something and try again.`);
+  }
+
+  const domainPattern = domainWherePattern(domain);
+  if(!domainPattern) throw new Error("Unsupported domain selected.");
+
+  const compat = computeViewCompatibility();
+  if(!compat[state.view]) state.view = firstCompatibleView(compat);
+
+  const fields = getSelectedOptions().filter(o => o.kind==="field");
+
+  const where = [];
+  where.push(domainPattern);
+
+  const selectParts = ["?item", "?itemLabel"];
+  for(const f of fields){
+    const outVar = f.var;              // e.g. ?birthDate
+    const inVar  = rawVarFor(outVar);  // e.g. ?birthDateRaw
+    where.push(`?item wdt:${f.prop} ${inVar} .`);
+    selectParts.push(`(${f.aggFn}(${inVar}) AS ${outVar})`);
+  }
+
+  where.push(`SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }`);
+
+  const limit = saneLimit(limitInput.value, 100);
+
+  return `#defaultView:${state.view}
+
+SELECT ${selectParts.join(" ")} WHERE {
+  ${where.join("\n  ")}
+}
+GROUP BY ?item ?itemLabel
+LIMIT ${limit}
+`;
+}
+
+/* Run */
+async function runQuery(query){
+  previewEl.src = buildEmbedUrl(query);
+
+  const url = WDQS_ENDPOINT + "?format=json&query=" + encodeURIComponent(query);
+  const res = await fetch(url, { headers:{ "Accept":"application/sparql-results+json" } });
+  if(!res.ok){
+    const txt = await res.text();
+    throw new Error(`WDQS error (HTTP ${res.status})\n${txt}`);
+  }
+  const json = await res.json();
+  return json;
+}
+
+async function onGenerateRun(){
+  errorEl.textContent = "";
+  actionHint.textContent = "";
+  statusEl.textContent = "Generating…";
+  setBusy(true);
+  enableActions(false);
+
+  try{
+    const query = buildSparql();
+    sparqlEl.value = query;
+    statusEl.textContent = "Running…";
+
+    const json = await runQuery(query);
+    state.lastQuery = query;
+    state.lastJson = json;
+    state.lastCsv = sparqlJsonToCsv(json);
+
+    const rows = json?.results?.bindings?.length ?? 0;
+    const cols = json?.head?.vars?.length ?? 0;
+
+    statusEl.textContent = `Done. Rows: ${rows}, Columns: ${cols}.`;
+    actionHint.textContent = hasAnyImageColumn()
+      ? "Actions ready. Images download creates a ZIP."
+      : "Actions ready.";
+    enableActions(true);
+  } catch(e){
+    statusEl.textContent = "Error.";
+    errorEl.textContent = String(e);
+  } finally {
+    setBusy(false);
+  }
+}
+runBtn.addEventListener("click", onGenerateRun);
+
+/* Custom category */
+function isQid(s){ return /^Q\d+$/i.test(String(s||"").trim()); }
+
+async function wbSearchTopItem(search){
+  const url = new URL(WD_API);
+  url.searchParams.set("action","wbsearchentities");
+  url.searchParams.set("format","json");
+  url.searchParams.set("search", search);
+  url.searchParams.set("language","en");
+  url.searchParams.set("uselang","en");
+  url.searchParams.set("type","item");
+  url.searchParams.set("limit","1");
+  url.searchParams.set("origin","*");
+
+  const res = await fetch(url.toString(), { headers:{ "Accept":"application/json" } });
+  if(!res.ok) throw new Error(`Wikidata search failed (HTTP ${res.status}).`);
+  const data = await res.json();
+  const top = data?.search?.[0];
+  if(!top?.id) throw new Error(`No Wikidata item found for: "${search}"`);
+  return { id: top.id, label: top.label || "" };
+}
+
+async function wbGetLabel(qid){
+  const url = new URL(WD_API);
+  url.searchParams.set("action","wbgetentities");
+  url.searchParams.set("format","json");
+  url.searchParams.set("ids", qid);
+  url.searchParams.set("props","labels");
+  url.searchParams.set("languages","en");
+  url.searchParams.set("origin","*");
+
+  const res = await fetch(url.toString(), { headers:{ "Accept":"application/json" } });
+  if(!res.ok) return "";
+  const data = await res.json();
+  return data?.entities?.[qid]?.labels?.en?.value || "";
+}
+
+async function applyCustomCategory(){
+  errorEl.textContent = "";
+  statusEl.textContent = "Resolving custom category…";
+  setBusy(true);
+
+  try{
+    const raw = String(state.custom.raw || "").trim();
+    if(!raw) throw new Error("Enter a custom category label or a Q-ID (e.g., Q33506).");
+
+    let qid = "";
+    let label = "";
+    if(isQid(raw)){
+      qid = raw.toUpperCase();
+      label = await wbGetLabel(qid);
+    } else {
+      const found = await wbSearchTopItem(raw);
+      qid = found.id;
+      label = found.label || raw;
+    }
+
+    state.custom.qid = qid;
+    state.custom.label = label;
+
+    OPTION_BY_ID["dom_custom"].label = `Custom: ${label ? label : qid} (${qid})`;
+    state.groupActive["categories"] = true;
+    selectOption("dom_custom");
+
+    update();
+    statusEl.textContent = `Custom category set: ${label ? label : qid} (${qid}).`;
+  } catch(e){
+    statusEl.textContent = "Error.";
+    errorEl.textContent = String(e);
+  } finally {
+    setBusy(false);
+  }
+}
+
+/* Rendering */
+function groupHint(groupId){
+  switch(groupId){
+    case "images": return "Photos / logos / flags (required; aggregated via SAMPLE).";
+    case "places": return "Cities/countries/regions + coordinates (required; SAMPLE).";
+    case "quantities": return "Population/area/runtime/pages/height (required; MAX).";
+    case "categories": return "Films/books/comics/actors/football + custom category.";
+    case "dates": return "Birth/death/inception/publication (required; MIN).";
+    default: return "";
+  }
+}
+
+function renderPrimaryBar(){
+  primaryBar.innerHTML = "";
+  for(const g of GROUPS){
+    const btn = document.createElement("button");
+    btn.className = "primary" + (state.groupActive[g.id] ? " active" : "");
+    btn.textContent = g.label;
+    btn.addEventListener("click", () => {
+      state.groupActive[g.id] = !state.groupActive[g.id];
+      if(!state.groupActive[g.id]){
+        for(const opt of OPTIONS.filter(o => o.group === g.id)) state.selected.delete(opt.id);
+      }
+      update();
+    });
+    primaryBar.appendChild(btn);
+  }
+}
+
+function renderViewDropdown(){
+  const compat = computeViewCompatibility();
+  if(!compat[state.view]) state.view = firstCompatibleView(compat);
+
+  viewSelect.innerHTML = "";
+  for(const v of VIEWS){
+    const opt = document.createElement("option");
+    opt.value = v.id;
+    opt.textContent = v.label;
+    opt.disabled = !compat[v.id];
+    viewSelect.appendChild(opt);
+  }
+  viewSelect.value = state.view;
+}
+viewSelect.addEventListener("change", () => { state.view = viewSelect.value; update(); });
+
+function renderPanels(){
+  panels.innerHTML = "";
+  const possibleDomains = computePossibleDomains();
+  const possibleList = [...possibleDomains].map(d => DOMAIN_LABEL[d] || d);
+  domainPill.textContent = possibleList.length ? `Possible domains: ${possibleList.join(", ")}` : "Possible domains: —";
+
+  for(const g of GROUPS){
+    if(!state.groupActive[g.id]) continue;
+
+    const panel = document.createElement("div");
+    panel.className = "panel";
+
+    const h2 = document.createElement("h2");
+    h2.textContent = g.label;
+    panel.appendChild(h2);
+
+    const hint = document.createElement("div");
+    hint.className = "muted tiny";
+    hint.textContent = groupHint(g.id);
+    panel.appendChild(hint);
+
+    const optionsDiv = document.createElement("div");
+    optionsDiv.className = "options";
+
+    const groupOpts = OPTIONS.filter(o => o.group === g.id);
+    for(const opt of groupOpts){
+      const isSelected = state.selected.has(opt.id);
+      const enabled = isSelected || optionWouldBeAllowed(opt, possibleDomains);
+
+      const btn = document.createElement("button");
+      btn.className = "option" + (isSelected ? " selected" : "") + (!enabled ? " disabled" : "");
+      btn.textContent = opt.label;
+
+      btn.addEventListener("click", () => {
+        if(state.running) return;
+        if(!enabled && !isSelected) return;
+        toggleOption(opt.id);
+      });
+
+      optionsDiv.appendChild(btn);
+    }
+    panel.appendChild(optionsDiv);
+
+    if(g.id === "categories"){
+      const box = document.createElement("div");
+      box.className = "subbox";
+
+      const lab = document.createElement("label");
+      lab.className = "small";
+      lab.textContent = "Custom category (label or Q-ID):";
+      box.appendChild(lab);
+
+      const row = document.createElement("div");
+      row.className = "row";
+
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.placeholder = "e.g., museum, painter, Q33506";
+      inp.value = state.custom.raw;
+      inp.style.flex = "1 1 260px";
+      inp.addEventListener("input", () => state.custom.raw = inp.value);
+
+      const mode = document.createElement("select");
+      mode.innerHTML = `
+        <option value="type">Treat as Type (P31/P279*)</option>
+        <option value="occupation">Treat as Occupation (human)</option>
+      `;
+      mode.value = state.custom.mode;
+      mode.addEventListener("change", () => state.custom.mode = mode.value);
+
+      const applyBtn = document.createElement("button");
+      applyBtn.textContent = "Apply";
+      applyBtn.addEventListener("click", applyCustomCategory);
+
+      row.appendChild(inp); row.appendChild(mode); row.appendChild(applyBtn);
+      box.appendChild(row);
+
+      const info = document.createElement("div");
+      info.className = "muted tiny";
+      info.style.marginTop = "6px";
+      info.textContent = state.custom.qid
+        ? `Resolved: ${state.custom.label || "(no label)"} (${state.custom.qid})`
+        : "Not set yet.";
+      box.appendChild(info);
+
+      panel.appendChild(box);
+    }
+
+    panels.appendChild(panel);
+  }
+}
+
+/* Actions below preview */
+function openEmbedDialog(){
+  if(!state.lastQuery) return;
+  const src = buildEmbedUrl(state.lastQuery);
+  embedCode.value = `<iframe style="width:100%; height:70vh;" scrolling="yes" frameborder="0" src="${src}"></iframe>\n`;
+  embedDialog.showModal();
+}
+async function copyEmbedToClipboard(){
+  try { await navigator.clipboard.writeText(embedCode.value); copyEmbed.textContent="Copied"; setTimeout(()=>copyEmbed.textContent="Copy", 1200); }
+  catch { embedCode.focus(); embedCode.select(); document.execCommand("copy"); }
+}
+function buildStandaloneHtml(query){
+  const src = buildEmbedUrl(query);
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WDQS Embed</title>
+<style>body{font-family:system-ui,sans-serif;margin:16px}textarea{width:100%;height:240px;border:1px solid #d0d7de;border-radius:12px;padding:10px}iframe{width:100%;height:70vh;border:1px solid #d0d7de;border-radius:12px;margin-top:12px}.muted{color:#555}</style>
+</head><body>
+<h1>Wikidata Query Service — Embedded Result</h1>
+<div class="muted">This file embeds the WDQS result view in an iframe.</div>
+<h2>Query</h2>
+<textarea spellcheck="false">${String(query).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")}</textarea>
+<h2>Result</h2>
+<iframe referrerpolicy="no-referrer" src="${src}"></iframe>
+</body></html>`;
+}
+function downloadHtml(){ if(!state.lastQuery) return; downloadTextFile("wdqs-embed.html","text/html;charset=utf-8", buildStandaloneHtml(state.lastQuery)); }
+function downloadCsv(){ if(!state.lastCsv) return; downloadTextFile("wdqs-results.csv","text/csv;charset=utf-8", state.lastCsv); }
+
+function extractImageUrlsFromLastJson(){
+  const json = state.lastJson;
+  if(!json) return [];
+  const rows = json?.results?.bindings || [];
+  const imageVars = new Set();
+  for(const opt of getSelectedOptions()){
+    if(opt.kind==="field" && opt.caps?.image) imageVars.add(opt.var.replace(/^\?/,""));
+  }
+  const urls = [];
+  for(const b of rows){
+    for(const v of imageVars){
+      const val = b[v]?.value;
+      if(typeof val==="string" && /^https?:\/\//i.test(val)) urls.push(val);
+    }
+  }
+  return [...new Set(urls)];
+}
+
+function filenameFromUrl(url, fallback){
+  try{
+    const u = new URL(url);
+    let name = u.pathname.split("/").filter(Boolean).pop() || fallback;
+    name = decodeURIComponent(name);
+    if(!/\.[a-z0-9]{2,5}$/i.test(name)) name += ".bin";
+    return name;
+  } catch { return fallback; }
+}
+
+async function downloadAllImagesZip(){
+  errorEl.textContent = "";
+  if(!state.lastJson) throw new Error("Run a query first.");
+
+  if(typeof JSZip === "undefined") throw new Error("JSZip not available. (CDN failed to load.)");
+
+  const convertToJpg = document.getElementById("jpegCheck")?.checked ?? false;
+  const thumbWidth = Number(document.getElementById("thumbWidthInput")?.value ?? 1600);
+
+  const urls = extractImageUrlsFromLastJson();
+  if(!urls.length) throw new Error("No image URLs found. Select Photos/Logos/Flags and run again.");
+
+  // Keep a reasonable cap for browser memory/network
+  const MAX_IMAGES = 80;
+  const capped = urls.slice(0, MAX_IMAGES);
+
+  statusEl.textContent = `Preparing ${capped.length} image(s)…`;
+  actionHint.textContent = convertToJpg
+    ? "Downloading thumbnails and converting to JPG…"
+    : "Downloading thumbnails (CORS-safe)…";
+
+  const zip = new JSZip();
+  const folder = zip.folder("images");
+  const failed = [];
+
+  let done = 0;
+
+  for(let i=0;i<capped.length;i++){
+    const rawUrl = capped[i];
+    try{
+      const fileTitle = tryExtractCommonsFileTitle(rawUrl);
+
+      // Resolve to a direct thumb URL (avoids CORS-blocked Special:FilePath redirects)
+      let downloadUrl = forceHttps(rawUrl);
+      let baseName = filenameFromUrl(downloadUrl, `image_${i+1}.bin`);
+
+      if(fileTitle){
+        const ii = await commonsImageInfo(fileTitle, thumbWidth);
+
+        // Prefer thumburl (rasterizes SVG, and /thumb/ URLs are commonly CORS-enabled) :contentReference[oaicite:10]{index=10}
+        downloadUrl = forceHttps(ii.thumburl || ii.url);
+
+        const originalName = fileTitle.replace(/^File:/i, "").trim();
+        baseName = sanitizeFilename(originalName);
+      } else {
+        baseName = sanitizeFilename(baseName);
+      }
+
+      const res = await fetch(downloadUrl, { redirect: "follow" });
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      let blob = await res.blob();
+
+      // Decide final filename
+      let outName = baseName;
+
+      if(convertToJpg){
+        blob = await blobToJpeg(blob, 0.9);
+        outName = outName.replace(/\.[a-z0-9]{2,5}$/i, "") + ".jpg";
+      } else {
+        // If it doesn't already end with an extension, try to add one
+        if(!/\.[a-z0-9]{2,5}$/i.test(outName)){
+          const ct = (res.headers.get("content-type") || "").toLowerCase();
+          if(ct.includes("png")) outName += ".png";
+          else if(ct.includes("jpeg") || ct.includes("jpg")) outName += ".jpg";
+          else if(ct.includes("svg")) outName += ".svg";
+          else outName += ".bin";
+        }
+      }
+
+      folder.file(outName, blob);
+    } catch(e){
+      failed.push(`${rawUrl}\n  -> ${String(e)}`);
+    } finally {
+      done++;
+      statusEl.textContent = `Downloading images… (${done}/${capped.length})`;
+    }
+  }
+
+  if(urls.length > MAX_IMAGES){
+    zip.file("README.txt", `Downloaded first ${MAX_IMAGES} images out of ${urls.length} detected.\nIncrease MAX_IMAGES in code if needed.\n`);
+  }
+  if(failed.length){
+    zip.file("FAILED_IMAGES.txt", failed.join("\n\n") + "\n");
+  }
+
+  const zipBlob = await zip.generateAsync({ type:"blob" });
+  downloadTextFile("wdqs-images.zip","application/zip", zipBlob);
+
+  statusEl.textContent = failed.length
+    ? `Images ZIP ready. Success: ${capped.length - failed.length}, Failed: ${failed.length}.`
+    : `Images ZIP ready. Success: ${capped.length}, Failed: 0.`;
+
+  actionHint.textContent = failed.length
+    ? "Some downloads failed; see FAILED_IMAGES.txt inside the ZIP."
+    : "All downloads succeeded.";
+}
+
+
+function restartAll(){
+  state.selected = new Set();
+  state.groupActive = Object.fromEntries(GROUPS.map(g => [g.id, false]));
+  state.view = "Table";
+  state.custom = { raw:"", qid:"", label:"", mode:"type" };
+  state.lastQuery = ""; state.lastJson = null; state.lastCsv = "";
+
+  sparqlEl.value = "";
+  previewEl.src = "about:blank";
+  statusEl.textContent = "Idle.";
+  errorEl.textContent = "";
+  actionHint.textContent = "";
+  limitInput.value = "100";
+
+  enableActions(false);
+  update();
+}
+
+/* Wire actions */
+embedBtn.addEventListener("click", openEmbedDialog);
+dlHtmlBtn.addEventListener("click", downloadHtml);
+dlCsvBtn.addEventListener("click", downloadCsv);
+dlImagesBtn.addEventListener("click", () => downloadAllImagesZip().catch(e => { statusEl.textContent="Error."; errorEl.textContent=String(e); }));
+restartBtn.addEventListener("click", restartAll);
+
+copyEmbed.addEventListener("click", copyEmbedToClipboard);
+closeEmbed.addEventListener("click", () => embedDialog.close());
+
+/* Render */
+function update(){
+  renderPrimaryBar();
+  renderPanels();
+  renderViewDropdown();
+  enableActions(!!state.lastQuery);
+}
+
+function renderPrimaryBar(){
+  primaryBar.innerHTML = "";
+  for(const g of GROUPS){
+    const btn = document.createElement("button");
+    btn.className = "primary" + (state.groupActive[g.id] ? " active" : "");
+    btn.textContent = g.label;
+    btn.addEventListener("click", () => {
+      state.groupActive[g.id] = !state.groupActive[g.id];
+      if(!state.groupActive[g.id]){
+        for(const opt of OPTIONS.filter(o => o.group === g.id)) state.selected.delete(opt.id);
+      }
+      update();
+    });
+    primaryBar.appendChild(btn);
+  }
+}
+function renderViewDropdown(){
+  const compat = computeViewCompatibility();
+  if(!compat[state.view]) state.view = firstCompatibleView(compat);
+  viewSelect.innerHTML = "";
+  for(const v of VIEWS){
+    const opt = document.createElement("option");
+    opt.value = v.id;
+    opt.textContent = v.label;
+    opt.disabled = !compat[v.id];
+    viewSelect.appendChild(opt);
+  }
+  viewSelect.value = state.view;
+}
+function renderPanels(){
+  panels.innerHTML = "";
+  const possibleDomains = computePossibleDomains();
+  const possibleList = [...possibleDomains].map(d => DOMAIN_LABEL[d] || d);
+  domainPill.textContent = possibleList.length ? `Possible domains: ${possibleList.join(", ")}` : "Possible domains: —";
+
+  for(const g of GROUPS){
+    if(!state.groupActive[g.id]) continue;
+
+    const panel = document.createElement("div");
+    panel.className = "panel";
+
+    const h2 = document.createElement("h2");
+    h2.textContent = g.label;
+    panel.appendChild(h2);
+
+    const hint = document.createElement("div");
+    hint.className = "muted tiny";
+    hint.textContent = groupHint(g.id);
+    panel.appendChild(hint);
+
+    const optionsDiv = document.createElement("div");
+    optionsDiv.className = "options";
+
+    const groupOpts = OPTIONS.filter(o => o.group === g.id);
+    for(const opt of groupOpts){
+      const isSelected = state.selected.has(opt.id);
+      const enabled = isSelected || optionWouldBeAllowed(opt, possibleDomains);
+
+      const btn = document.createElement("button");
+      btn.className = "option" + (isSelected ? " selected" : "") + (!enabled ? " disabled" : "");
+      btn.textContent = opt.label;
+
+      btn.addEventListener("click", () => {
+        if(state.running) return;
+        if(!enabled && !isSelected) return;
+        toggleOption(opt.id);
+      });
+
+      optionsDiv.appendChild(btn);
+    }
+    panel.appendChild(optionsDiv);
+
+    if(g.id === "categories"){
+      const box = document.createElement("div");
+      box.className = "subbox";
+
+      const lab = document.createElement("label");
+      lab.className = "small";
+      lab.textContent = "Custom category (label or Q-ID):";
+      box.appendChild(lab);
+
+      const row = document.createElement("div");
+      row.className = "row";
+
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.placeholder = "e.g., museum, painter, Q33506";
+      inp.value = state.custom.raw;
+      inp.style.flex = "1 1 260px";
+      inp.addEventListener("input", () => state.custom.raw = inp.value);
+
+      const mode = document.createElement("select");
+      mode.innerHTML = `
+        <option value="type">Treat as Type (P31/P279*)</option>
+        <option value="occupation">Treat as Occupation (human)</option>
+      `;
+      mode.value = state.custom.mode;
+      mode.addEventListener("change", () => state.custom.mode = mode.value);
+
+      const applyBtn = document.createElement("button");
+      applyBtn.textContent = "Apply";
+      applyBtn.addEventListener("click", applyCustomCategory);
+
+      row.appendChild(inp); row.appendChild(mode); row.appendChild(applyBtn);
+      box.appendChild(row);
+
+      const info = document.createElement("div");
+      info.className = "muted tiny";
+      info.style.marginTop = "6px";
+      info.textContent = state.custom.qid
+        ? `Resolved: ${state.custom.label || "(no label)"} (${state.custom.qid})`
+        : "Not set yet.";
+      box.appendChild(info);
+
+      panel.appendChild(box);
+    }
+
+    panels.appendChild(panel);
+  }
+}
+
+function forceHttps(u){
+  return String(u || "").replace(/^http:\/\//i, "https://");
+}
+
+// Try to extract "File:..." from URLs returned by WDQS (usually Special:FilePath/...)
+function tryExtractCommonsFileTitle(url){
+  url = forceHttps(url);
+  try{
+    const u = new URL(url);
+
+    // Special:FilePath/<name>
+    const m1 = u.pathname.match(/\/Special:FilePath\/(.+)$/i);
+    if(m1){
+      const fileName = decodeURIComponent(m1[1]).split("?")[0];
+      return "File:" + fileName;
+    }
+
+    // /wiki/File:<name>
+    const m2 = u.pathname.match(/\/wiki\/File:(.+)$/i);
+    if(m2){
+      const fileName = decodeURIComponent(m2[1]).split("?")[0];
+      return "File:" + fileName;
+    }
+
+    // If already an upload.wikimedia.org URL, last segment is often the filename
+    const last = u.pathname.split("/").filter(Boolean).pop();
+    if(last && /\.[a-z0-9]{2,5}$/i.test(last)){
+      return "File:" + decodeURIComponent(last);
+    }
+  } catch {}
+  return null;
+}
+
+function sanitizeFilename(name){
+  // keep it simple and cross-platform
+  return String(name || "image")
+    .replace(/[\\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 160);
+}
+
+// Resolve file title to { url, thumburl, mime, thumbmime }
+async function commonsImageInfo(fileTitle, thumbWidth){
+  const params = new URLSearchParams();
+  params.set("action", "query");
+  params.set("format", "json");
+  params.set("origin", "*"); // key for cross-origin Action API requests :contentReference[oaicite:9]{index=9}
+  params.set("titles", fileTitle);
+  params.set("prop", "imageinfo");
+  params.set("iiprop", "url|mime|thumbmime");
+  if(thumbWidth && Number(thumbWidth) > 0){
+    params.set("iiurlwidth", String(Math.floor(Number(thumbWidth))));
+  }
+
+  const res = await fetch(COMMONS_API + "?" + params.toString(), {
+    headers: { "Accept": "application/json" }
+  });
+  if(!res.ok) throw new Error(`Commons API imageinfo failed (HTTP ${res.status}).`);
+  const data = await res.json();
+
+  const pages = data?.query?.pages || {};
+  const page = Object.values(pages)[0];
+  const ii = page?.imageinfo?.[0];
+  if(!ii?.url && !ii?.thumburl) throw new Error(`No imageinfo for ${fileTitle}`);
+  return ii;
+}
+
+// Convert a raster blob to JPEG using canvas
+async function blobToJpeg(blob, quality=0.9){
+  const bmp = await createImageBitmap(blob);
+  try{
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    const ctx = canvas.getContext("2d");
+    // fill background to avoid black transparency artifacts
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bmp, 0, 0);
+
+    const jpegBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        b => b ? resolve(b) : reject(new Error("JPEG conversion failed.")),
+        "image/jpeg",
+        quality
+      );
+    });
+    return jpegBlob;
+  } finally {
+    bmp.close?.();
+  }
+}
+
+
+
+/* init */
+update();
+enableActions(false);
+</script>
+</body>
+</html>
