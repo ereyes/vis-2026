@@ -1,0 +1,2348 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Text Analyzer & Frequent-Word Highlighter</title>
+
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --panel: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: rgba(17, 24, 39, .12);
+      --accent: #2f6fed;
+      --danger: #e11d48;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1000px 500px at 15% 0%, #eef2ff 0%, var(--bg) 55%),
+        radial-gradient(900px 450px at 85% 10%, #ecfeff 0%, rgba(246,247,251,0) 60%),
+        var(--bg);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+      letter-spacing: 0.2px;
+    }
+
+    .sub {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 10px 0;
+    }
+
+    label.small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 200px;
+      resize: vertical;
+      padding: 14px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #ffffff;
+      color: var(--text);
+      outline: none;
+      line-height: 1.45;
+      font-size: 14px;
+      box-shadow: 0 1px 2px rgba(17,24,39,.05);
+    }
+
+    textarea:focus {
+      border-color: rgba(47,111,237,.55);
+      box-shadow: 0 0 0 4px rgba(47,111,237,.16), 0 1px 2px rgba(17,24,39,.06);
+    }
+
+    input[type="text"], input[type="number"], input[type="file"] {
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text);
+      padding: 10px 10px;
+      border-radius: 10px;
+      outline: none;
+      font-size: 13px;
+      box-shadow: 0 1px 2px rgba(17,24,39,.05);
+    }
+
+    input[type="text"]:focus, input[type="number"]:focus {
+      border-color: rgba(47,111,237,.55);
+      box-shadow: 0 0 0 4px rgba(47,111,237,.16), 0 1px 2px rgba(17,24,39,.06);
+    }
+
+    input[type="number"] { width: 110px; }
+
+    button {
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 650;
+      letter-spacing: .2px;
+      box-shadow: 0 1px 2px rgba(17,24,39,.05);
+    }
+
+    button:hover {
+      border-color: rgba(17,24,39,.18);
+      box-shadow: 0 2px 6px rgba(17,24,39,.08);
+    }
+
+    button:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    button:disabled:hover {
+      border-color: var(--border);
+      box-shadow: none;
+    }
+
+    button.primary {
+      background: rgba(47,111,237,.10);
+      border-color: rgba(47,111,237,.35);
+    }
+    button.primary:hover {
+      background: rgba(47,111,237,.14);
+      border-color: rgba(47,111,237,.45);
+    }
+
+    button.danger {
+      background: rgba(225,29,72,.08);
+      border-color: rgba(225,29,72,.30);
+    }
+    button.danger:hover {
+      background: rgba(225,29,72,.12);
+      border-color: rgba(225,29,72,.40);
+    }
+
+    .note {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 6px 0 0;
+    }
+
+    .panels {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1fr 1.25fr;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .hidden { display: none !important; }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel);
+      padding: 14px;
+      box-shadow: 0 8px 24px rgba(17,24,39,.06);
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      letter-spacing: .2px;
+    }
+
+    .statsGrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .stat {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 10px;
+      background: #fbfcff;
+    }
+    .stat .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .stat .value {
+      font-size: 14px;
+      font-weight: 750;
+      word-break: break-word;
+    }
+
+    .checkboxRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 0 6px;
+      color: var(--muted);
+      font-size: 12px;
+      user-select: none;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 10px;
+      overflow: hidden;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+    }
+
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(17,24,39,.08);
+      font-size: 13px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #4b5563;
+      background: #f8fafc;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .wordList {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 8px;
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    .wordRow {
+      display: grid;
+      grid-template-columns: 22px 16px 1fr auto 28px;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 6px;
+      border-radius: 10px;
+    }
+    .wordRow:hover { background: #f8fafc; }
+
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      border: 1px solid rgba(17,24,39,.16);
+    }
+
+    .wordText {
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .wordCount {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+      padding-left: 8px;
+      white-space: nowrap;
+    }
+
+    .removeBtn {
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      border: 1px solid rgba(225,29,72,.35);
+      background: rgba(225,29,72,.08);
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .removeBtn:hover {
+      border-color: rgba(225,29,72,.50);
+      background: rgba(225,29,72,.12);
+    }
+
+    .highlightedText {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 12px;
+      white-space: pre-wrap;
+      overflow: auto;
+      max-height: 68vh;
+      line-height: 1.55;
+      font-size: 14px;
+      box-shadow: inset 0 1px 0 rgba(17,24,39,.03);
+    }
+
+    .hl {
+      padding: 0 3px;
+      border-radius: 6px;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+      box-shadow: inset 0 0 0 1px rgba(17,24,39,.10);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--muted);
+      font-size: 12px;
+      box-shadow: 0 1px 2px rgba(17,24,39,.05);
+      white-space: nowrap;
+    }
+
+    .pill strong { color: var(--text); }
+
+    /* Pending files list */
+    .fileList {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .fileChip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(17,24,39,.05);
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 100%;
+    }
+    .fileChip .name {
+      color: var(--text);
+      font-weight: 650;
+      max-width: 380px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .fileChip .x {
+      border: 1px solid rgba(225,29,72,.30);
+      background: rgba(225,29,72,.08);
+      border-radius: 999px;
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-weight: 900;
+      color: var(--text);
+      line-height: 1;
+    }
+    .fileChip .x:hover {
+      border-color: rgba(225,29,72,.45);
+      background: rgba(225,29,72,.12);
+    }
+
+    /* Session table preview */
+    .tableWrap {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: auto;
+      max-height: 420px;
+      background: #ffffff;
+    }
+    .previewTable {
+      margin: 0;
+      border-radius: 0;
+      border: none;
+      width: max-content;
+      min-width: 100%;
+    }
+    .previewTable thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .previewTable tbody tr {
+      cursor: pointer;
+    }
+    .previewTable tbody tr:hover {
+      background: #f8fafc;
+    }
+    .previewTable tbody tr.selected {
+      background: #eef2ff;
+    }
+
+    @media (max-width: 980px) {
+      .panels { grid-template-columns: 1fr; }
+      .note { margin-left: 0; width: 100%; }
+    }
+
+    .canvasWrap {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+    }
+
+    #networkCanvas {
+    width: 100%;
+    height: 520px;
+    display: block;
+    }
+
+
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>Text Analyzer & Frequent-Word Highlighter</h1>
+    <p class="sub">
+      Paste text and/or upload text files. Click <strong>Go</strong> to analyze and generate a session table you can export to CSV or copy into Google Sheets.
+      Click a row in the session preview to load it into the analyzer view.
+    </p>
+
+    <!-- Files -->
+    <div class="row" style="align-items: flex-start;">
+      <div style="flex: 1; min-width: 260px;">
+        <label class="small" for="fileInput">Add text files (optional)</label><br/>
+        <input id="fileInput" type="file" multiple accept="text/*,.txt,.md,.log,.csv,.json,.html,.xml" />
+        <div class="hint">File name is used as <code>text_name</code> in the exported table.</div>
+        <div id="pendingFiles" class="fileList"></div>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:center; margin-top: 18px;">
+        <button id="clearFilesBtn" type="button" disabled>Clear files</button>
+      </div>
+    </div>
+
+    <!-- Pasted text name -->
+    <div class="row">
+      <label class="small" for="textName">Name for pasted text</label>
+      <input id="textName" type="text" placeholder="e.g., intro_paragraph" style="flex: 1; min-width: 220px;" />
+      <span class="note" style="margin-left: 0;">Used only if you paste text (files use file name).</span>
+    </div>
+
+    <textarea id="inputText" placeholder="Paste text here (optional if using files)..."></textarea>
+
+    <div class="row">
+      <div class="checkboxRow" style="margin: 0;">
+        <input id="appendSession" type="checkbox" />
+        <label for="appendSession">Append to session (keep previous rows)</label>
+      </div>
+
+      <div class="checkboxRow" style="margin: 0 0 0 10px;">
+        <input id="excludeStopwords" type="checkbox" checked />
+        <label for="excludeStopwords">Exclude stopwords (English/French auto)</label>
+      </div>
+
+      <span class="note">Reading time uses 200 wpm. Readability uses a heuristic syllable counter.</span>
+    </div>
+
+    <div class="row" style="margin-top: 6px; align-items: flex-start;">
+      <div style="flex: 1; min-width: 260px;">
+        <label class="small" for="customStopwordsInput">Custom excluded words</label><br/>
+        <input id="customStopwordsInput" type="text" placeholder="Add words to exclude (comma / semicolon separated, e.g., company; project)" style="width: 100%; min-width: 260px;" />
+        <div class="hint">Applies to rankings, session export, and the network. Tip: Shift+click a word node in the network to toggle exclusion.</div>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:center; margin-top: 18px;">
+        <button id="addCustomStopwordsBtn" type="button">Add</button>
+        <button id="clearCustomStopwordsBtn" type="button">Clear</button>
+      </div>
+    </div>
+
+    <div id="customStopwordsList" class="fileList"></div>
+
+    <div class="row" style="margin-top: 0;">
+      <div class="checkboxRow" style="margin: 0;">
+        <input id="excludeOnRemoveHighlight" type="checkbox" />
+        <label for="excludeOnRemoveHighlight">When removing a highlighted word, also exclude it globally</label>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top: 6px;">
+      <button id="goBtn" class="primary" type="button">Go</button>
+      <button id="resetBtn" class="danger" type="button">Reset</button>
+    </div>
+
+    <div id="panels" class="panels hidden">
+      <!-- LEFT -->
+      <div class="panel">
+        <h2>Statistics (current selection)</h2>
+
+        <div class="statsGrid">
+          <div class="stat">
+            <div class="label">Text name</div>
+            <div class="value" id="currentName">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Detected language</div>
+            <div class="value" id="languageLabel">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Word count</div>
+            <div class="value" id="wordCount">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Unique words</div>
+            <div class="value" id="uniqueCount">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Sentence count</div>
+            <div class="value" id="sentenceCount">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Estimated reading time</div>
+            <div class="value" id="readingTime">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Flesch Reading Ease</div>
+            <div class="value" id="readingEase">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Flesch–Kincaid Grade</div>
+            <div class="value" id="gradeLevel">—</div>
+          </div>
+        </div>
+
+        <h2 style="margin-top: 10px;">10 most frequent words</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 70%;">Word</th>
+              <th class="num">Count</th>
+            </tr>
+          </thead>
+          <tbody id="topWordsBody"></tbody>
+        </table>
+
+        <h2 style="margin-top: 10px;">Words to highlight</h2>
+
+        <div class="row">
+          <span class="pill">Currently active: <strong id="activeCount">0</strong></span>
+          <span class="pill">In list: <strong id="listedCount">0</strong></span>
+        </div>
+
+        <div class="row">
+          <label class="small" for="topNInput">Add top</label>
+          <input id="topNInput" type="number" min="1" max="200" value="10" />
+          <label class="small">words from the frequency ranking</label>
+          <button id="addTopBtn" type="button">Add</button>
+        </div>
+
+        <div class="row">
+          <input id="addWordInput" type="text" placeholder="Add a specific word (e.g., customer)" />
+          <button id="addWordBtn" type="button">Add word</button>
+        </div>
+
+        <div id="wordList" class="wordList"></div>
+
+        <div class="row" style="margin-top: 12px;">
+          <button id="downloadCsvBtn" type="button" disabled>Download session as CSV</button>
+          <button id="copyTableBtn" type="button" disabled>Copy session table</button>
+          <button id="clearSessionBtn" class="danger" type="button" disabled>Clear session</button>
+          <span class="note" style="margin-left: 0;">Copy = TSV (ideal for Google Sheets).</span>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="panel">
+        <h2>Highlighted text (current selection)</h2>
+        <div class="hint">
+          Highlight list applies to the currently selected row from the session preview (click a row to load it here).
+        </div>
+        <div id="highlightedText" class="highlightedText"></div>
+      </div>
+    </div>
+
+    <!-- Session preview -->
+    <div id="sessionPanel" class="panel hidden" style="margin-top: 14px;">
+      <div class="row" style="margin: 0 0 8px;">
+        <h2 style="margin:0;">Session results preview</h2>
+        <span class="pill">Rows: <strong id="sessionRowCount">0</strong></span>
+        <span class="pill">Columns: <strong id="sessionColCount">0</strong></span>
+        <span class="note">Click a row to load it into the analyzer above.</span>
+      </div>
+
+      <div class="tableWrap">
+        <table class="previewTable" id="sessionTable"></table>
+      </div>
+    </div>
+
+<div id="networkPanel" class="panel hidden" style="margin-top: 14px;">
+  <div class="row" style="margin: 0 0 8px;">
+    <h2 style="margin:0;">File–word network</h2>
+
+    <label class="small" for="netTopK">Top words/file</label>
+    <input id="netTopK" type="number" min="5" max="200" value="25" />
+
+    <label class="small" for="netMaxWords">Max words</label>
+    <input id="netMaxWords" type="number" min="20" max="500" value="200" />
+
+    <label class="small" for="netMinDf">Min files/word</label>
+    <input id="netMinDf" type="number" min="1" max="999" value="2" />
+
+    <label class="small" for="netMinEdge">Min count/file</label>
+    <input id="netMinEdge" type="number" min="1" max="999" value="1" />
+
+    <button id="buildNetworkBtn" type="button">Build network</button>
+
+    <span class="note">
+      Files are always shown. Word nodes connect to the files where they appear (stopwords setting applies).
+    </span>
+  </div>
+
+  <div class="canvasWrap">
+    <canvas id="networkCanvas"></canvas>
+  </div>
+
+  <div id="networkInfo" class="hint">
+    Tip: Keep “Min files/word = 2” to focus on shared vocabulary. Increase “Top words/file” to grow the network.
+  </div>
+</div>
+
+
+  </div>
+
+  <script>
+    // ---------- Utilities ----------
+    function supportsUnicodeProps() {
+      try { new RegExp("\\p{L}", "u"); return true; } catch { return false; }
+    }
+
+    const HAS_UNICODE = supportsUnicodeProps();
+    const APO = "['’]";
+
+    const wordRegex = HAS_UNICODE
+      ? new RegExp(`[\\p{L}\\p{N}’']+`, "gu")
+      : /[A-Za-z0-9'’]+/g;
+
+    const tokenRegex = HAS_UNICODE
+      ? new RegExp(`[\\p{L}\\p{N}’']+|[^\\p{L}\\p{N}’']+`, "gu")
+      : /[A-Za-z0-9'’]+|[^A-Za-z0-9'’]+/g;
+
+    const wordTokenTest = HAS_UNICODE
+      ? new RegExp(`^[\\p{L}\\p{N}’']+$`, "u")
+      : /^[A-Za-z0-9'’]+$/;
+
+    const FR_ELISIONS = new Set(["l","d","j","t","s","n","m","c","qu","jusqu","lorsqu","puisqu"]);
+
+    function trimApos(s) {
+      return (s || "").replace(new RegExp(`^${APO}+|${APO}+$`, "g"), "");
+    }
+
+    function normalizeWord(raw, lang) {
+      let w = (raw || "").toLowerCase();
+      w = trimApos(w);
+
+      // French elision handling: l’homme -> homme, c’est -> est, qu’il -> il
+      if (lang === "fr") {
+        const idx = w.search(new RegExp(APO));
+        if (idx > 0) {
+          const prefix = w.slice(0, idx);
+          const rest = w.slice(idx + 1);
+          if (FR_ELISIONS.has(prefix) && rest) w = rest;
+        }
+      }
+      return w;
+    }
+
+    function normalizeForDetection(raw) {
+      let w = (raw || "").toLowerCase();
+      w = trimApos(w);
+      const idx = w.search(new RegExp(APO));
+      if (idx > 0) {
+        const prefix = w.slice(0, idx);
+        const rest = w.slice(idx + 1);
+        if (FR_ELISIONS.has(prefix) && rest) w = rest;
+      }
+      return w;
+    }
+
+    function escapeHtml(str) {
+      return (str || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function colorFromWord(word) {
+      const s = String(word);
+      let h = 0;
+      for (let i = 0; i < s.length; i++) {
+        h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      }
+      const hue = h % 360;
+      return `hsl(${hue} 55% 85%)`;
+    }
+
+    function formatReadingTime(wordCount, wpm = 200) {
+      if (!wordCount) return "—";
+      const minutes = wordCount / wpm;
+      const totalSeconds = Math.round(minutes * 60);
+      const m = Math.floor(totalSeconds / 60);
+      const s = totalSeconds % 60;
+      if (m <= 0) return `${s}s (at ${wpm} wpm)`;
+      if (s === 0) return `${m} min (at ${wpm} wpm)`;
+      return `${m} min ${s}s (at ${wpm} wpm)`;
+    }
+
+    function round1(x) {
+      return Math.round(x * 10) / 10;
+    }
+
+    // Heuristic syllable counter (English-oriented; acceptable as a signal for FR as well)
+    function countSyllables(word) {
+      let w = (word || "").toLowerCase();
+      w = w.replace(/[^a-z]/g, "");
+      if (!w) return 1;
+      if (w.length <= 3) return 1;
+
+      const vowels = "aeiouy";
+      let count = 0;
+      let prevVowel = false;
+
+      for (let i = 0; i < w.length; i++) {
+        const isVowel = vowels.includes(w[i]);
+        if (isVowel && !prevVowel) count++;
+        prevVowel = isVowel;
+      }
+
+      if (w.endsWith("e")) count--;
+      if (w.endsWith("le") && w.length > 2) {
+        const beforeL = w[w.length - 3];
+        if (!vowels.includes(beforeL)) count++;
+      }
+
+      return Math.max(1, count);
+    }
+
+    function readingEaseLabel(score) {
+      if (!isFinite(score)) return "—";
+      if (score >= 90) return "Very easy";
+      if (score >= 80) return "Easy";
+      if (score >= 70) return "Fairly easy";
+      if (score >= 60) return "Standard";
+      if (score >= 50) return "Fairly difficult";
+      if (score >= 30) return "Difficult";
+      return "Very confusing";
+    }
+
+    // ---------- Stopwords ----------
+    const STOPWORDS_EN = new Set([
+      "a","an","and","are","as","at","be","but","by","for","if","in","into","is","it","no","not","of","on","or","such",
+      "that","the","their","then","there","these","they","this","to","was","will","with","we","you","your","i","me","my",
+      "our","us","he","him","his","she","her","hers","them","what","which","who","whom","where","when","why","how",
+      "from","up","down","out","over","under","again","further","once","here","also","than","too","very","can","could",
+      "should","would","may","might","must","do","does","did","done","have","has","had","having","been","being","were","am",
+      "because","while","until","about","between","before","after","during","through","each","few","more","most","other",
+      "some","any","both","all","own","same","so","just"
+    ]);
+
+    // Common French stopword list (Snowball-style + frequent function words)
+    const STOPWORDS_FR = new Set([
+      "au","aux","avec","ce","ces","dans","de","des","du","elle","en","et","eux","il","je","la","le","leur","lui","ma","mais",
+      "me","même","mes","moi","mon","ne","nos","notre","nous","on","ou","par","pas","pour","qu","que","qui","sa","se","ses",
+      "son","sur","ta","te","tes","toi","ton","tu","un","une","vos","votre","vous","c","d","j","l","à","m","n","s","t","y",
+
+      "été","étée","étées","étés","étant","suis","es","est","sommes","êtes","sont","serai","seras","sera","serons","serez",
+      "seront","serais","serait","serions","seriez","seraient","étais","était","étions","étiez","étaient","fus","fut","fûmes",
+      "fûtes","furent","sois","soit","soyons","soyez","soient","fusse","fusses","fût","fussions","fussiez","fussent",
+
+      "ayant","eu","eue","eues","eus","ai","as","avons","avez","ont","aurai","auras","aura","aurons","aurez","auront","aurais",
+      "aurait","aurions","auriez","auraient","avais","avait","avions","aviez","avaient","eut","eûmes","eûtes","eurent","aie",
+      "aies","ait","ayons","ayez","aient","eusse","eusses","eût","eussions","eussiez","eussent",
+
+      "ainsi","alors","après","assez","aussi","autre","avant","bon","car","ceci","cela","celui","celle","celles",
+      "ceux","chaque","chez","comme","comment","contre","deux","donc","dont","encore","entre","fait","faites","fois","grand",
+      "ici","jamais","juste","là","les","leurs","lors","lorsque","malgré","mieux","moins","ni","non","nouveau","où","puis",
+      "quand","quel","quelle","quelles","quels","quelque","quelques","sans","selon","seulement","si","sous","souvent","tandis",
+      "tant","tous","tout","toute","toutes","très","trop","vers","voici","voilà"
+    ]);
+
+    function stopwordsFor(lang) {
+      return lang === "fr" ? STOPWORDS_FR : STOPWORDS_EN;
+    }
+
+    function detectLanguage(text) {
+      const tokens = (text.match(wordRegex) || []).slice(0, 2500);
+      let enHits = 0;
+      let frHits = 0;
+      let accentHits = 0;
+
+      const accentRe = /[àâäçéèêëîïôöùûüÿœæ]/i;
+
+      for (const tok of tokens) {
+        if (accentRe.test(tok)) accentHits++;
+        const w = normalizeForDetection(tok);
+        if (!w) continue;
+        if (STOPWORDS_EN.has(w)) enHits++;
+        if (STOPWORDS_FR.has(w)) frHits++;
+      }
+
+      const frScore = frHits + (accentHits * 2);
+      const enScore = enHits;
+
+      if ((frScore >= enScore + 5) && (frHits >= 8 || accentHits >= 2)) return "fr";
+      return "en";
+    }
+
+    // ---------- Export helpers ----------
+    function csvCell(value) {
+      const s = (value === null || value === undefined) ? "" : String(value);
+      if (/[",\n\r]/.test(s)) return `"${s.replaceAll('"', '""')}"`;
+      return s;
+    }
+
+    function tsvCell(value) {
+      const s = (value === null || value === undefined) ? "" : String(value);
+      return s.replace(/[\t\r\n]+/g, " ");
+    }
+
+    function sanitizeFilename(name) {
+      return (name || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+        .replace(/[^a-z0-9_-]+/g, "")
+        .slice(0, 60);
+    }
+
+    function todayISO() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    async function writeClipboard(text) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (_) {}
+
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        return ok;
+      } catch (_) {
+        return false;
+      }
+    }
+
+// -------------------- File–word network (Canvas force layout) --------------------
+const net = {
+  nodes: [],        // [{ key, type: "file"|"word", label, x,y,vx,vy, r, color, pinned?, df?, tf?, files? }]
+  edges: [],        // [{ a, b, w }] where a/b are node indices
+
+  running: false,
+  rafId: null,
+
+  dragging: null,   // node index
+  hover: null,      // node index
+
+  width: 0,
+  height: 0,
+  dpr: 1,
+
+  hasBuilt: false,
+  posByKey: new Map()
+};
+
+function fileNodeColor(i, n) {
+  const N = Math.max(1, n);
+  const hue = (i * 360 / N) % 360;
+  // A slightly stronger pastel than word highlights, so files stand out.
+  return `hsl(${hue} 60% 78%)`;
+}
+
+function rememberNetworkPositions() {
+  for (const n of net.nodes) {
+    if (!n || !n.key) continue;
+    net.posByKey.set(n.key, { x: n.x, y: n.y });
+  }
+}
+
+function stopNetwork() {
+  net.running = false;
+  if (net.rafId) cancelAnimationFrame(net.rafId);
+  net.rafId = null;
+  net.dragging = null;
+  net.hover = null;
+}
+
+function resizeNetworkCanvas() {
+  const canvas = el.networkCanvas;
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = Math.max(1, Math.round(rect.width * dpr));
+  canvas.height = Math.max(1, Math.round(rect.height * dpr));
+
+  const ctx = canvas.getContext("2d");
+  // Draw in CSS pixels
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  net.width = rect.width;
+  net.height = rect.height;
+  net.dpr = dpr;
+}
+
+function placeFileNodes(fileNodes) {
+  const n = fileNodes.length;
+  const cx = net.width / 2;
+  const cy = net.height / 2;
+
+  if (n === 1) {
+    fileNodes[0].x = cx;
+    fileNodes[0].y = cy;
+    return;
+  }
+
+  const R = Math.max(110, Math.min(net.width, net.height) * 0.36);
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    fileNodes[i].x = cx + R * Math.cos(angle);
+    fileNodes[i].y = cy + R * Math.sin(angle);
+  }
+}
+
+function autoWordRadiusScale(wordCount) {
+  // As the network grows, shrink word nodes to reduce clutter.
+  // ~60 words => scale ~1.0; 240 words => ~0.5.
+  const target = 60;
+  const scale = Math.sqrt(target / Math.max(1, wordCount));
+  return Math.max(0.38, Math.min(1, scale));
+}
+
+function computeFileWordNetworkData({ topPerFile = 25, maxWords = 200, minDf = 2, minCount = 1 }) {
+  const excludeStopwords = el.excludeStopwords.checked;
+  const files = state.session;
+  const fileCount = files.length;
+
+  // 1) File nodes (always visible)
+  const nodes = [];
+  const fileNodes = [];
+
+  for (let i = 0; i < fileCount; i++) {
+    const item = files[i];
+    const key = `file:${item.id || i}`;
+
+    const node = {
+      key,
+      type: "file",
+      fileIndex: i,
+      label: item.text_name || `file_${i + 1}`,
+      pinned: true,
+      r: 18,
+      color: fileNodeColor(i, fileCount),
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0
+    };
+
+    nodes.push(node);
+    fileNodes.push(node);
+  }
+
+  // Try to preserve previous positions; otherwise use a circle layout
+  let anyPreset = false;
+  for (const fn of fileNodes) {
+    const p = net.posByKey.get(fn.key);
+    if (p) {
+      fn.x = p.x; fn.y = p.y;
+      anyPreset = true;
+    }
+  }
+  if (!anyPreset) placeFileNodes(fileNodes);
+
+  // 2) Pick top words per file (union) and compute word df/tf + per-file counts
+  const wordAgg = new Map(); // word -> { word, df, tf, perFile: Map(fileIndex -> count) }
+
+  for (let i = 0; i < fileCount; i++) {
+    const item = files[i];
+    const ranked = computeRankedWords(item.freq, item.language, excludeStopwords);
+
+    const chosen = ranked.slice(0, Math.max(1, Math.min(200, topPerFile)));
+    for (const t of chosen) {
+      const w = t.word;
+      const c = t.count;
+
+      if (!w) continue;
+      if (!isFinite(c) || c < minCount) continue;
+
+      let rec = wordAgg.get(w);
+      if (!rec) {
+        rec = { word: w, df: 0, tf: 0, perFile: new Map() };
+        wordAgg.set(w, rec);
+      }
+
+      if (!rec.perFile.has(i)) rec.df += 1;
+      rec.perFile.set(i, c);
+      rec.tf += c;
+    }
+  }
+
+  let words = Array.from(wordAgg.values()).filter(r => r.df >= minDf);
+
+  words.sort((a, b) => (b.df - a.df) || (b.tf - a.tf) || a.word.localeCompare(b.word));
+  words = words.slice(0, Math.max(0, Math.min(500, maxWords)));
+
+  const wordScale = autoWordRadiusScale(words.length);
+
+  // 3) Word nodes
+  const wordIndex = new Map(); // word -> nodeIndex
+
+  for (const rec of words) {
+    const key = `word:${rec.word}`;
+
+    const df = rec.df;
+    const tf = rec.tf;
+
+    // size: df drives size strongly; tf adds a small boost
+    const rBase = Math.max(6, Math.min(18, 6 + Math.sqrt(df) * 2.6 + Math.log10(tf + 1) * 1.6));
+    const r = Math.max(4, Math.min(18, rBase * wordScale));
+
+    // seed position near the centroid of connected file nodes
+    let sx = 0, sy = 0, k = 0;
+    for (const [fi] of rec.perFile.entries()) {
+      const fn = fileNodes[fi];
+      if (!fn) continue;
+      sx += fn.x; sy += fn.y; k += 1;
+    }
+    if (k > 0) { sx /= k; sy /= k; }
+    else { sx = net.width / 2; sy = net.height / 2; }
+
+    const jitter = 18;
+    let x0 = sx + (Math.random() - 0.5) * jitter;
+    let y0 = sy + (Math.random() - 0.5) * jitter;
+
+    // preserve old position if available (progressive growth)
+    const p = net.posByKey.get(key);
+    if (p) { x0 = p.x; y0 = p.y; }
+
+    const node = {
+      key,
+      type: "word",
+      label: rec.word,
+      df,
+      tf,
+      files: Array.from(rec.perFile.entries()).map(([fileIndex, count]) => ({ fileIndex, count })),
+      pinned: false,
+      r,
+      color: colorFromWord(rec.word),
+      x: x0,
+      y: y0,
+      vx: 0,
+      vy: 0
+    };
+
+    nodes.push(node);
+    wordIndex.set(rec.word, nodes.length - 1);
+  }
+
+  // 4) Edges: file -> word
+  const edges = [];
+  for (const rec of words) {
+    const wIdx = wordIndex.get(rec.word);
+    if (wIdx === undefined) continue;
+
+    for (const [fi, c] of rec.perFile.entries()) {
+      // file nodes are at indices 0..fileCount-1
+      edges.push({ a: fi, b: wIdx, w: c });
+    }
+  }
+
+  // Avoid pathological cases with too many edges
+  if (edges.length > 5000) {
+    edges.sort((e1, e2) => e2.w - e1.w);
+    edges.length = 5000;
+  }
+
+  return { nodes, edges, fileCount, wordCount: words.length };
+}
+
+function hitTestNode(x, y) {
+  let best = null;
+  let bestD2 = Infinity;
+
+  for (let i = 0; i < net.nodes.length; i++) {
+    const n = net.nodes[i];
+    const dx = x - n.x;
+    const dy = y - n.y;
+    const d2 = dx * dx + dy * dy;
+    const rr = (n.r + 7) * (n.r + 7);
+    if (d2 <= rr && d2 < bestD2) {
+      bestD2 = d2;
+      best = i;
+    }
+  }
+  return best;
+}
+
+function drawNetwork() {
+  const ctx = el.networkCanvas.getContext("2d");
+  ctx.clearRect(0, 0, net.width, net.height);
+
+  // edges
+  ctx.lineCap = "round";
+  for (const e of net.edges) {
+    const a = net.nodes[e.a];
+    const b = net.nodes[e.b];
+    if (!a || !b) continue;
+
+    ctx.strokeStyle = "rgba(17,24,39,0.12)";
+    ctx.lineWidth = Math.min(3.0, 0.6 + Math.sqrt(Math.max(1, e.w)) * 0.35);
+
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+
+  ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
+
+  // nodes
+  for (let i = 0; i < net.nodes.length; i++) {
+    const n = net.nodes[i];
+    const isActive = (i === net.hover) || (i === net.dragging);
+
+    // Fill
+    ctx.beginPath();
+    ctx.fillStyle = n.color;
+    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Border: file nodes have stronger border
+    if (n.type === "file") {
+      ctx.strokeStyle = isActive ? "rgba(17,24,39,0.55)" : "rgba(17,24,39,0.30)";
+      ctx.lineWidth = isActive ? 3 : 2;
+    } else {
+      ctx.strokeStyle = isActive ? "rgba(17,24,39,0.40)" : "rgba(17,24,39,0.18)";
+      ctx.lineWidth = isActive ? 2 : 1;
+    }
+    ctx.stroke();
+
+    // Labels:
+    // - File nodes: always show label
+    // - Word nodes: show on hover or if large (df-heavy)
+    const showLabel = (n.type === "file") || isActive || (n.type === "word" && n.r >= 12);
+    if (showLabel) {
+      ctx.fillStyle = "rgba(17,24,39,0.92)";
+      ctx.fillText(n.label, n.x + n.r + 7, n.y + 4);
+    }
+  }
+}
+
+function stepNetworkPhysics() {
+  const nodes = net.nodes;
+  const edges = net.edges;
+
+  const n = nodes.length;
+  if (n === 0) return;
+
+  // Tuning
+  const repulsion = 1500 + n * 10;  // higher => more spread
+  const spring = 0.022;            // higher => tighter springs
+  const baseLen = 105;             // preferred edge length
+  const damping = 0.86;            // velocity damping
+
+  const cx = net.width / 2;
+  const cy = net.height / 2;
+
+  const canMove = (i) => !nodes[i].pinned && net.dragging !== i;
+  const addForce = (i, fx, fy) => {
+    if (!canMove(i)) return;
+    nodes[i].vx += fx;
+    nodes[i].vy += fy;
+  };
+
+  // Repulsion between all pairs (only affects movable nodes)
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = nodes[i], b = nodes[j];
+
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const d2 = dx*dx + dy*dy + 0.01;
+      const d = Math.sqrt(d2);
+
+      const f = repulsion / d2;
+      const fx = (dx / d) * f;
+      const fy = (dy / d) * f;
+
+      // i gets pushed away from j, j away from i
+      addForce(i, -fx, -fy);
+      addForce(j,  fx,  fy);
+    }
+  }
+
+  // Springs along edges
+  for (const e of edges) {
+    const a = nodes[e.a], b = nodes[e.b];
+    if (!a || !b) continue;
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const d = Math.sqrt(dx*dx + dy*dy) || 1;
+
+    // stronger count => slightly shorter length
+    const desired = Math.max(40, baseLen - Math.min(45, Math.log(e.w + 1) * 18));
+    const force = spring * (d - desired);
+
+    const fx = (dx / d) * force;
+    const fy = (dy / d) * force;
+
+    // Pull b toward a and a toward b (but file nodes are pinned so only words move)
+    addForce(e.a,  fx,  fy);
+    addForce(e.b, -fx, -fy);
+  }
+
+  // Integrate positions
+  for (let i = 0; i < n; i++) {
+    const a = nodes[i];
+
+    // dragging node stays under cursor
+    if (net.dragging === i) {
+      a.vx = 0; a.vy = 0;
+      continue;
+    }
+
+    // pinned nodes: no physics integration
+    if (a.pinned) {
+      a.vx = 0; a.vy = 0;
+      continue;
+    }
+
+    // gentle pull toward center (helps keep words inside the hull)
+    a.vx += (cx - a.x) * 0.0012;
+    a.vy += (cy - a.y) * 0.0012;
+
+    a.vx *= damping;
+    a.vy *= damping;
+
+    a.x += a.vx;
+    a.y += a.vy;
+
+    // bounds
+    const pad = a.r + 8;
+    if (a.x < pad) { a.x = pad; a.vx *= -0.4; }
+    if (a.x > net.width - pad) { a.x = net.width - pad; a.vx *= -0.4; }
+    if (a.y < pad) { a.y = pad; a.vy *= -0.4; }
+    if (a.y > net.height - pad) { a.y = net.height - pad; a.vy *= -0.4; }
+  }
+}
+
+function networkLoop() {
+  if (!net.running) return;
+  stepNetworkPhysics();
+  drawNetwork();
+  net.rafId = requestAnimationFrame(networkLoop);
+}
+
+function buildNetwork() {
+  if (state.session.length === 0) {
+    alert("Add files and/or paste text, then click Go first.");
+    return;
+  }
+
+  net.hasBuilt = true;
+
+  // Preserve old node positions so the graph can "grow" progressively
+  rememberNetworkPositions();
+  stopNetwork();
+
+  el.networkPanel.classList.remove("hidden");
+  resizeNetworkCanvas();
+
+  const topPerFile = Number(el.netTopK.value) || 25;
+  const maxWords = Number(el.netMaxWords.value) || 200;
+  const minDf = Number(el.netMinDf.value) || 2;
+  const minCount = Number(el.netMinEdge.value) || 1;
+
+  const data = computeFileWordNetworkData({ topPerFile, maxWords, minDf, minCount });
+
+  net.nodes = data.nodes;
+  net.edges = data.edges;
+
+  const wordNodes = data.wordCount || 0;
+  const fileNodes = data.fileCount || 0;
+
+  if (wordNodes === 0) {
+    drawNetwork();
+    el.networkInfo.textContent =
+      `Files: ${fileNodes} | Words: 0 | Edges: 0 | Stopwords excluded: ${el.excludeStopwords.checked ? "true" : "false"} | Custom excluded: ${state.customStopwords.size} — ` +
+      `No words match current thresholds. Try increasing “Top words/file”, lowering “Min files/word”, or setting “Min files/word = 1”.`;
+    return;
+  }
+
+  el.networkInfo.textContent =
+    `Files: ${fileNodes} | Words: ${wordNodes} | Edges: ${net.edges.length} | ` +
+    `Top words/file: ${topPerFile} | Min files/word: ${minDf} | Stopwords excluded: ${el.excludeStopwords.checked ? "true" : "false"} | Custom excluded: ${state.customStopwords.size}`;
+
+  net.running = true;
+  networkLoop();
+}
+
+function attachNetworkInteractions() {
+  const canvas = el.networkCanvas;
+
+  const posFromEvent = (ev) => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ev.clientX - rect.left,
+      y: ev.clientY - rect.top
+    };
+  };
+
+  canvas.addEventListener("mousemove", (ev) => {
+    const p = posFromEvent(ev);
+
+    if (net.dragging !== null) {
+      const n = net.nodes[net.dragging];
+      if (n) {
+        n.x = p.x;
+        n.y = p.y;
+        n.vx = 0;
+        n.vy = 0;
+      }
+      return;
+    }
+
+    const hit = hitTestNode(p.x, p.y);
+    net.hover = hit;
+
+    if (hit !== null) {
+      const n = net.nodes[hit];
+      if (n.type === "file") {
+        const item = state.session[n.fileIndex];
+        const wc = item && item.metrics ? item.metrics.wordCount : "";
+        el.networkInfo.textContent =
+          `Hover file: ${n.label} | words: ${wc} | ` +
+          `Files: ${state.session.length} | Words: ${Math.max(0, net.nodes.length - state.session.length)} | Edges: ${net.edges.length}`;
+      } else {
+        // word
+        const topFiles = (n.files || [])
+          .slice()
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 3)
+          .map(x => `${state.session[x.fileIndex]?.text_name || ("file_" + (x.fileIndex + 1))} (${x.count})`)
+          .join(", ");
+
+        el.networkInfo.textContent =
+          `Hover word: ${n.label} | files(df): ${n.df} | total(tf): ${n.tf}` +
+          (topFiles ? ` | top files: ${topFiles}` : "");
+      }
+    } else {
+      el.networkInfo.textContent =
+        `Files: ${state.session.length} | Words: ${Math.max(0, net.nodes.length - state.session.length)} | Edges: ${net.edges.length} | ` +
+        `Stopwords excluded: ${el.excludeStopwords.checked ? "true" : "false"} | Custom excluded: ${state.customStopwords.size}`;
+    }
+  });
+
+  canvas.addEventListener("mousedown", (ev) => {
+    const p = posFromEvent(ev);
+    const hit = hitTestNode(p.x, p.y);
+    if (hit === null) return;
+
+    const n = net.nodes[hit];
+
+    // Shift/Alt + click a word node => toggle global exclusion (ranking + export + network)
+    if (n && n.type === "word" && (ev.shiftKey || ev.altKey)) {
+      const w = normalizeCustomExcluded(n.label);
+      if (!w) return;
+
+      if (state.customStopwords.has(w)) state.customStopwords.delete(w);
+      else state.customStopwords.add(w);
+
+      onWordFiltersChanged();
+      return;
+    }
+
+    net.dragging = hit;
+    net.running = true;
+    if (!net.rafId) networkLoop();
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (net.dragging !== null) {
+      // persist dragged position
+      const n = net.nodes[net.dragging];
+      if (n && n.key) net.posByKey.set(n.key, { x: n.x, y: n.y });
+    }
+    net.dragging = null;
+  });
+
+  window.addEventListener("resize", () => {
+    if (el.networkPanel.classList.contains("hidden")) return;
+    resizeNetworkCanvas();
+    drawNetwork();
+  });
+}
+
+
+    function defaultPastedName() {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const stamp =
+        d.getFullYear() +
+        pad(d.getMonth() + 1) +
+        pad(d.getDate()) + "_" +
+        pad(d.getHours()) +
+        pad(d.getMinutes()) +
+        pad(d.getSeconds());
+      return `pasted_${stamp}`;
+    }
+
+    function bytesHuman(n) {
+      if (!isFinite(n)) return "";
+      const units = ["B","KB","MB","GB"];
+      let v = n, i = 0;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+      return `${Math.round(v * 10) / 10}${units[i]}`;
+    }
+
+    // ---------- Core analysis (base analysis stored per item) ----------
+    function computeBaseAnalysis(text) {
+      const language = detectLanguage(text);
+      const rawMatches = text.match(wordRegex) || [];
+      const normalized = rawMatches.map(w => normalizeWord(w, language)).filter(Boolean);
+
+      const freq = new Map();
+      for (const w of normalized) freq.set(w, (freq.get(w) || 0) + 1);
+
+      const sentences = text
+        .split(/[.!?]+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      const sentenceCountRaw = sentences.length;
+      const sentenceCountForFormula = Math.max(1, sentenceCountRaw);
+
+      let syllables = 0;
+      for (const w of normalized) syllables += countSyllables(w);
+
+      const wordCount = normalized.length;
+      const uniqueCount = freq.size;
+
+      let ease = NaN, grade = NaN;
+      if (wordCount > 0) {
+        const wordsPerSentence = wordCount / sentenceCountForFormula;
+        const syllablesPerWord = syllables / wordCount;
+        ease = 206.835 - (1.015 * wordsPerSentence) - (84.6 * syllablesPerWord);
+        grade = (0.39 * wordsPerSentence) + (11.8 * syllablesPerWord) - 15.59;
+      }
+
+      const wpm = 200;
+      const readingTimeSeconds = wordCount > 0 ? Math.round((wordCount / wpm) * 60) : 0;
+      const easeRounded = isFinite(ease) ? round1(ease) : null;
+      const gradeRounded = isFinite(grade) ? round1(grade) : null;
+
+      const metrics = {
+        wordCount,
+        uniqueCount,
+        sentenceCount: sentenceCountRaw,
+        readingTimeWpm: wpm,
+        readingTimeSeconds,
+        readingTimeHuman: formatReadingTime(wordCount, wpm),
+        readingEase: easeRounded,
+        readingEaseLabel: easeRounded === null ? "—" : readingEaseLabel(easeRounded),
+        fkGrade: gradeRounded
+      };
+
+      return { language, freq, metrics };
+    }
+
+    function computeRankedWords(freq, language, excludeStopwords) {
+      const stopset = stopwordsFor(language);
+      const ranked = [];
+      for (const [word, count] of freq.entries()) {
+        if (excludeStopwords && stopset.has(word)) continue;
+        if (state.customStopwords && state.customStopwords.has(word)) continue;
+        ranked.push({ word, count });
+      }
+      ranked.sort((a, b) => (b.count - a.count) || a.word.localeCompare(b.word));
+      return ranked;
+    }
+
+    // ---------- State ----------
+    const state = {
+      pendingFiles: [],  // array of File
+      session: [],       // array of items { id, text_name, text, language, freq, metrics }
+      selectedIndex: -1,
+      excludeStopwords: true,
+      appendSession: false,
+      customStopwords: new Set(),
+
+      // current view / highlighting
+      highlightList: [],
+      activeSet: new Set(),
+      colors: new Map()
+    };
+
+    // ---------- DOM ----------
+    const el = {
+      fileInput: document.getElementById("fileInput"),
+      pendingFiles: document.getElementById("pendingFiles"),
+      clearFilesBtn: document.getElementById("clearFilesBtn"),
+
+      textName: document.getElementById("textName"),
+      inputText: document.getElementById("inputText"),
+
+      appendSession: document.getElementById("appendSession"),
+      excludeStopwords: document.getElementById("excludeStopwords"),
+      customStopwordsInput: document.getElementById("customStopwordsInput"),
+      addCustomStopwordsBtn: document.getElementById("addCustomStopwordsBtn"),
+      clearCustomStopwordsBtn: document.getElementById("clearCustomStopwordsBtn"),
+      customStopwordsList: document.getElementById("customStopwordsList"),
+      excludeOnRemoveHighlight: document.getElementById("excludeOnRemoveHighlight"),
+
+
+      goBtn: document.getElementById("goBtn"),
+      resetBtn: document.getElementById("resetBtn"),
+
+      panels: document.getElementById("panels"),
+      sessionPanel: document.getElementById("sessionPanel"),
+
+      // Stats fields
+      currentName: document.getElementById("currentName"),
+      languageLabel: document.getElementById("languageLabel"),
+      wordCount: document.getElementById("wordCount"),
+      uniqueCount: document.getElementById("uniqueCount"),
+      sentenceCount: document.getElementById("sentenceCount"),
+      readingTime: document.getElementById("readingTime"),
+      readingEase: document.getElementById("readingEase"),
+      gradeLevel: document.getElementById("gradeLevel"),
+
+      topWordsBody: document.getElementById("topWordsBody"),
+
+      topNInput: document.getElementById("topNInput"),
+      addTopBtn: document.getElementById("addTopBtn"),
+      addWordInput: document.getElementById("addWordInput"),
+      addWordBtn: document.getElementById("addWordBtn"),
+
+      wordList: document.getElementById("wordList"),
+      highlightedText: document.getElementById("highlightedText"),
+      activeCount: document.getElementById("activeCount"),
+      listedCount: document.getElementById("listedCount"),
+
+      downloadCsvBtn: document.getElementById("downloadCsvBtn"),
+      copyTableBtn: document.getElementById("copyTableBtn"),
+      clearSessionBtn: document.getElementById("clearSessionBtn"),
+
+      sessionTable: document.getElementById("sessionTable"),
+      sessionRowCount: document.getElementById("sessionRowCount"),
+      sessionColCount: document.getElementById("sessionColCount"),
+
+        networkPanel: document.getElementById("networkPanel"),
+        netTopK: document.getElementById("netTopK"),
+      netMaxWords: document.getElementById("netMaxWords"),
+        netMinDf: document.getElementById("netMinDf"),
+        netMinEdge: document.getElementById("netMinEdge"),
+        buildNetworkBtn: document.getElementById("buildNetworkBtn"),
+        networkCanvas: document.getElementById("networkCanvas"),
+        networkInfo: document.getElementById("networkInfo")
+
+    };
+
+
+    // ---------- Custom excluded words (global) ----------
+    function normalizeCustomExcluded(raw) {
+      return trimApos(String(raw || "").toLowerCase().trim());
+    }
+
+    function parseCustomExcludedList(raw) {
+      return String(raw || "")
+        .split(/[,\n\r;]+/g)
+        .map(s => normalizeCustomExcluded(s))
+        .filter(Boolean);
+    }
+
+    function renderCustomStopwords() {
+      if (!el.customStopwordsList) return;
+      el.customStopwordsList.innerHTML = "";
+
+      const arr = Array.from(state.customStopwords || []);
+      arr.sort((a, b) => a.localeCompare(b));
+
+      if (arr.length === 0) return;
+
+      for (const w of arr) {
+        const chip = document.createElement("div");
+        chip.className = "fileChip";
+        chip.title = "Excluded word";
+
+        const name = document.createElement("span");
+        name.className = "name";
+        name.textContent = w;
+
+        const x = document.createElement("span");
+        x.className = "x";
+        x.textContent = "×";
+        x.title = "Remove exclusion";
+        x.addEventListener("click", () => {
+          state.customStopwords.delete(w);
+          onWordFiltersChanged();
+        });
+
+        chip.appendChild(name);
+        chip.appendChild(x);
+        el.customStopwordsList.appendChild(chip);
+      }
+    }
+
+    function addCustomStopwordsFromText(raw) {
+      const items = parseCustomExcludedList(raw);
+      if (items.length === 0) return false;
+
+      let changed = false;
+      for (const w of items) {
+        if (!state.customStopwords.has(w)) {
+          state.customStopwords.add(w);
+          changed = true;
+        }
+      }
+      return changed;
+    }
+
+    function isWordExcluded(word, lang) {
+      if (state.customStopwords && state.customStopwords.has(word)) return true;
+      if (el.excludeStopwords.checked && stopwordsFor(lang).has(word)) return true;
+      return false;
+    }
+
+    function pruneHighlightListForCurrent() {
+      const item = getCurrentItem();
+      if (!item) return;
+
+      const lang = item.language;
+
+      state.highlightList = state.highlightList.filter(w => !isWordExcluded(w, lang));
+      for (const w of Array.from(state.activeSet)) {
+        if (isWordExcluded(w, lang)) state.activeSet.delete(w);
+      }
+
+      el.listedCount.textContent = String(state.highlightList.length);
+      el.activeCount.textContent = String(state.activeSet.size);
+    }
+
+    function onWordFiltersChanged() {
+      renderCustomStopwords();
+
+      if (state.session.length > 0) {
+        // Session preview and exports depend on word filters.
+        renderSessionPreview();
+
+        // Current selection views.
+        renderTop10Current();
+        pruneHighlightListForCurrent();
+        renderWordList();
+        renderHighlightedText();
+      }
+
+      // If the network has been built, rebuild it to reflect changes (positions persist).
+      if (!el.networkPanel.classList.contains("hidden") && net.hasBuilt) {
+        buildNetwork();
+      }
+    }
+
+
+    // ---------- Pending file management ----------
+    function fileKey(f) {
+      return `${f.name}::${f.size}::${f.lastModified}`;
+    }
+
+    function addPendingFiles(fileList) {
+      const existing = new Set(state.pendingFiles.map(fileKey));
+      for (const f of Array.from(fileList || [])) {
+        const key = fileKey(f);
+        if (!existing.has(key)) {
+          state.pendingFiles.push(f);
+          existing.add(key);
+        }
+      }
+      renderPendingFiles();
+    }
+
+    function removePendingFile(key) {
+      state.pendingFiles = state.pendingFiles.filter(f => fileKey(f) !== key);
+      renderPendingFiles();
+    }
+
+    function clearPendingFiles() {
+      state.pendingFiles = [];
+      renderPendingFiles();
+    }
+
+    function renderPendingFiles() {
+      el.pendingFiles.innerHTML = "";
+
+      if (state.pendingFiles.length === 0) {
+        el.clearFilesBtn.disabled = true;
+        return;
+      }
+      el.clearFilesBtn.disabled = false;
+
+      for (const f of state.pendingFiles) {
+        const chip = document.createElement("div");
+        chip.className = "fileChip";
+        chip.title = `${f.name} (${bytesHuman(f.size)})`;
+
+        const name = document.createElement("span");
+        name.className = "name";
+        name.textContent = f.name;
+
+        const size = document.createElement("span");
+        size.textContent = bytesHuman(f.size);
+
+        const x = document.createElement("span");
+        x.className = "x";
+        x.textContent = "×";
+        x.title = "Remove file";
+        x.addEventListener("click", () => removePendingFile(fileKey(f)));
+
+        chip.appendChild(name);
+        chip.appendChild(size);
+        chip.appendChild(x);
+        el.pendingFiles.appendChild(chip);
+      }
+    }
+
+    async function readFileAsText(file) {
+      // Modern
+      if (file && typeof file.text === "function") return await file.text();
+
+      // Fallback
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || new Error("Failed to read file."));
+        reader.readAsText(file);
+      });
+    }
+
+    // ---------- Session export table (same for preview, CSV, and copy) ----------
+    function buildSessionExportTable() {
+      const excludeStopwords = el.excludeStopwords.checked;
+
+      const header = [
+        "text_name",
+        "language",
+        "word_count",
+        "unique_words",
+        "sentence_count",
+        "reading_time_wpm",
+        "reading_time_seconds",
+        "reading_time_human",
+        "flesch_reading_ease",
+        "flesch_reading_ease_label",
+        "flesch_kincaid_grade",
+        "stopwords_excluded"
+      ];
+      for (let i = 1; i <= 10; i++) header.push(`top${i}_word`, `top${i}_count`);
+
+      const rows = state.session.map(item => {
+        const m = item.metrics;
+        const ranked = computeRankedWords(item.freq, item.language, excludeStopwords);
+        const top10 = ranked.slice(0, 10);
+
+        const row = [
+          item.text_name,
+          item.language,
+          m.wordCount ?? "",
+          m.uniqueCount ?? "",
+          m.sentenceCount ?? "",
+          m.readingTimeWpm ?? 200,
+          m.readingTimeSeconds ?? "",
+          m.readingTimeHuman ?? "",
+          m.readingEase ?? "",
+          m.readingEaseLabel ?? "",
+          m.fkGrade ?? "",
+          excludeStopwords ? "true" : "false"
+        ];
+
+        for (let i = 0; i < 10; i++) {
+          const t = top10[i];
+          row.push(t ? t.word : "");
+          row.push(t ? t.count : "");
+        }
+
+        return row;
+      });
+
+      return { header, rows };
+    }
+
+    function renderSessionPreview() {
+      const { header, rows } = buildSessionExportTable();
+
+      el.sessionRowCount.textContent = String(rows.length);
+      el.sessionColCount.textContent = String(header.length);
+
+      el.sessionTable.innerHTML = "";
+
+      // Header
+      const thead = document.createElement("thead");
+      const trh = document.createElement("tr");
+      for (const h of header) {
+        const th = document.createElement("th");
+        th.textContent = h;
+        trh.appendChild(th);
+      }
+      thead.appendChild(trh);
+
+      // Body
+      const tbody = document.createElement("tbody");
+      rows.forEach((r, idx) => {
+        const tr = document.createElement("tr");
+        tr.dataset.index = String(idx);
+        if (idx === state.selectedIndex) tr.classList.add("selected");
+        tr.addEventListener("click", () => setCurrentSelection(idx));
+
+        for (let c = 0; c < r.length; c++) {
+          const td = document.createElement("td");
+          td.textContent = String(r[c] ?? "");
+          // numeric-ish columns: counts/seconds/grade etc
+          const colName = header[c] || "";
+          if (
+            colName.endsWith("_count") ||
+            colName === "word_count" ||
+            colName === "unique_words" ||
+            colName === "sentence_count" ||
+            colName === "reading_time_seconds" ||
+            colName === "flesch_kincaid_grade" ||
+            colName === "reading_time_wpm"
+          ) {
+            td.classList.add("num");
+          }
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      });
+
+      el.sessionTable.appendChild(thead);
+      el.sessionTable.appendChild(tbody);
+
+      const hasRows = state.session.length > 0;
+      el.downloadCsvBtn.disabled = !hasRows;
+      el.copyTableBtn.disabled = !hasRows;
+      el.clearSessionBtn.disabled = !hasRows;
+
+      el.sessionPanel.classList.toggle("hidden", !hasRows);
+      el.networkPanel.classList.toggle("hidden", !hasRows);
+    }
+
+    // ---------- Current selection rendering ----------
+    function ensureColor(word) {
+      if (!state.colors.has(word)) state.colors.set(word, colorFromWord(word));
+      return state.colors.get(word);
+    }
+
+    function getCurrentItem() {
+      if (state.selectedIndex < 0 || state.selectedIndex >= state.session.length) return null;
+      return state.session[state.selectedIndex];
+    }
+
+    function setCurrentSelection(index) {
+      state.selectedIndex = index;
+
+      // Update selected class in preview table
+      const trs = el.sessionTable.querySelectorAll("tbody tr");
+      trs.forEach(tr => tr.classList.toggle("selected", Number(tr.dataset.index) === index));
+
+      const item = getCurrentItem();
+      if (!item) return;
+
+      // Update stats
+      el.currentName.textContent = item.text_name || "—";
+      el.languageLabel.textContent = item.language === "fr" ? "French" : "English";
+
+      const m = item.metrics || {};
+      el.wordCount.textContent = String(m.wordCount ?? "0");
+      el.uniqueCount.textContent = String(m.uniqueCount ?? "0");
+      el.sentenceCount.textContent = String(m.sentenceCount ?? "0");
+      el.readingTime.textContent = m.readingTimeHuman ?? "—";
+      if ((m.wordCount ?? 0) === 0) {
+        el.readingEase.textContent = "—";
+        el.gradeLevel.textContent = "—";
+      } else {
+        el.readingEase.textContent =
+          (m.readingEase === null || m.readingEase === undefined)
+            ? "—"
+            : `${m.readingEase} (${m.readingEaseLabel || "—"})`;
+        el.gradeLevel.textContent =
+          (m.fkGrade === null || m.fkGrade === undefined) ? "—" : String(m.fkGrade);
+      }
+
+      // Render top 10 for current selection
+      renderTop10Current();
+
+      // Reset highlight list to current top 10 by default
+      state.highlightList = [];
+      state.activeSet = new Set();
+
+      const ranked = computeRankedWords(item.freq, item.language, el.excludeStopwords.checked);
+      ranked.slice(0, 10).forEach(x => addWordToHighlightList(x.word, true, false));
+
+      renderWordList();
+      renderHighlightedText();
+
+      // Ensure panels visible
+      el.panels.classList.remove("hidden");
+    }
+
+    function renderTop10Current() {
+      const item = getCurrentItem();
+      el.topWordsBody.innerHTML = "";
+      if (!item) return;
+
+      const ranked = computeRankedWords(item.freq, item.language, el.excludeStopwords.checked);
+      const top10 = ranked.slice(0, 10);
+
+      if (top10.length === 0) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="2" style="color: var(--muted);">No words detected.</td>`;
+        el.topWordsBody.appendChild(tr);
+        return;
+      }
+
+      for (const t of top10) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${escapeHtml(t.word)}</td>
+          <td class="num">${t.count}</td>
+        `;
+        el.topWordsBody.appendChild(tr);
+      }
+    }
+
+    // ---------- Highlight word list management ----------
+    function addWordToHighlightList(word, active = true, reRender = true) {
+      const item = getCurrentItem();
+      if (!item) return;
+
+      const w = normalizeWord(word, item.language);
+      if (!w) return;
+
+      if (!state.highlightList.includes(w)) state.highlightList.push(w);
+      if (active) state.activeSet.add(w);
+      else state.activeSet.delete(w);
+
+      ensureColor(w);
+
+      if (reRender) {
+        renderWordList();
+        renderHighlightedText();
+      }
+    }
+
+    function removeWordFromHighlightList(word) {
+      const item = getCurrentItem();
+      if (!item) return;
+
+      const w = normalizeWord(word, item.language);
+      state.highlightList = state.highlightList.filter(x => x !== w);
+      state.activeSet.delete(w);
+
+      // Optional: treat removed highlighted words as global exclusions (affects ranking + network).
+      if (el.excludeOnRemoveHighlight.checked && w) {
+        state.customStopwords.add(w);
+        onWordFiltersChanged();
+        return;
+      }
+
+      renderWordList();
+      renderHighlightedText();
+    }
+
+    function addTopNToHighlightList(n) {
+      const item = getCurrentItem();
+      if (!item) return;
+
+      const N = Math.max(1, Math.min(200, Number(n) || 10));
+      const ranked = computeRankedWords(item.freq, item.language, el.excludeStopwords.checked);
+      ranked.slice(0, N).forEach(x => addWordToHighlightList(x.word, true, false));
+
+      renderWordList();
+      renderHighlightedText();
+    }
+
+    function renderWordList() {
+      el.wordList.innerHTML = "";
+
+      const list = state.highlightList.slice();
+      el.listedCount.textContent = String(list.length);
+      el.activeCount.textContent = String(state.activeSet.size);
+
+      if (list.length === 0) {
+        const div = document.createElement("div");
+        div.style.color = "var(--muted)";
+        div.style.padding = "8px";
+        div.textContent = "No words in the highlight list yet. Use “Add” or “Add word”.";
+        el.wordList.appendChild(div);
+        return;
+      }
+
+      const item = getCurrentItem();
+      for (const w of list) {
+        const count = (item && item.freq.get(w)) || 0;
+        const active = state.activeSet.has(w);
+        const color = ensureColor(w);
+
+        const row = document.createElement("div");
+        row.className = "wordRow";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = active;
+        cb.addEventListener("change", () => {
+          if (cb.checked) state.activeSet.add(w);
+          else state.activeSet.delete(w);
+          el.activeCount.textContent = String(state.activeSet.size);
+          renderHighlightedText();
+        });
+
+        const swatch = document.createElement("div");
+        swatch.className = "swatch";
+        swatch.style.background = color;
+
+        const wordText = document.createElement("div");
+        wordText.className = "wordText";
+        wordText.title = w;
+        wordText.textContent = w;
+
+        const wordCount = document.createElement("div");
+        wordCount.className = "wordCount";
+        wordCount.textContent = String(count);
+
+        const rm = document.createElement("button");
+        rm.className = "removeBtn";
+        rm.type = "button";
+        rm.title = "Remove from list";
+        rm.textContent = "×";
+        rm.addEventListener("click", () => removeWordFromHighlightList(w));
+
+        row.appendChild(cb);
+        row.appendChild(swatch);
+        row.appendChild(wordText);
+        row.appendChild(wordCount);
+        row.appendChild(rm);
+
+        el.wordList.appendChild(row);
+      }
+    }
+
+    function renderHighlightedText() {
+      const item = getCurrentItem();
+      if (!item || !item.text || !item.text.trim()) {
+        el.highlightedText.textContent = "";
+        return;
+      }
+
+      const lang = item.language;
+      const tokens = item.text.match(tokenRegex) || [item.text];
+
+      let html = "";
+      for (const tok of tokens) {
+        if (wordTokenTest.test(tok)) {
+          const norm = normalizeWord(tok, lang);
+          if (norm && state.activeSet.has(norm)) {
+            const bg = ensureColor(norm);
+            html += `<span class="hl" style="background:${bg};">${escapeHtml(tok)}</span>`;
+          } else {
+            html += escapeHtml(tok);
+          }
+        } else {
+          html += escapeHtml(tok);
+        }
+      }
+      el.highlightedText.innerHTML = html;
+    }
+
+    // ---------- Session export actions ----------
+    function downloadSessionCSV() {
+      if (state.session.length === 0) return;
+
+      const { header, rows } = buildSessionExportTable();
+      const csv =
+        "\ufeff" +
+        header.map(csvCell).join(",") + "\n" +
+        rows.map(r => r.map(csvCell).join(",")).join("\n") +
+        "\n";
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+
+      const base =
+        state.session.length === 1
+          ? sanitizeFilename(state.session[0].text_name)
+          : "session";
+
+      const filename = `stats_${base}_${todayISO()}.csv`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function copySessionTable() {
+      if (state.session.length === 0) return;
+
+      const { header, rows } = buildSessionExportTable();
+      const tsv =
+        header.map(tsvCell).join("\t") + "\n" +
+        rows.map(r => r.map(tsvCell).join("\t")).join("\n") +
+        "\n";
+
+      const ok = await writeClipboard(tsv);
+
+      const original = el.copyTableBtn.textContent;
+      if (ok) {
+        el.copyTableBtn.textContent = "Copied";
+        setTimeout(() => { el.copyTableBtn.textContent = original; }, 1200);
+      } else {
+        alert("Copy failed (browser restrictions). Try using the CSV download instead.");
+      }
+    }
+
+    function clearSession() {
+      state.session = [];
+      state.selectedIndex = -1;
+      state.highlightList = [];
+      state.activeSet = new Set();
+      state.colors = new Map();
+
+      el.panels.classList.add("hidden");
+      el.sessionPanel.classList.add("hidden");
+      stopNetwork();
+      net.hasBuilt = false;
+      el.networkPanel.classList.add("hidden");
+
+      el.currentName.textContent = "—";
+      el.languageLabel.textContent = "—";
+      el.wordCount.textContent = "—";
+      el.uniqueCount.textContent = "—";
+      el.sentenceCount.textContent = "—";
+      el.readingTime.textContent = "—";
+      el.readingEase.textContent = "—";
+      el.gradeLevel.textContent = "—";
+      el.topWordsBody.innerHTML = "";
+      el.wordList.innerHTML = "";
+      el.highlightedText.textContent = "";
+      el.activeCount.textContent = "0";
+      el.listedCount.textContent = "0";
+
+      el.downloadCsvBtn.disabled = true;
+      el.copyTableBtn.disabled = true;
+      el.clearSessionBtn.disabled = true;
+    }
+
+    // ---------- Main run ----------
+    async function run() {
+      state.appendSession = el.appendSession.checked;
+      state.excludeStopwords = el.excludeStopwords.checked;
+
+      const inputs = [];
+
+      // Pasted text (optional)
+      const pasted = (el.inputText.value || "").trim();
+      if (pasted) {
+        const name = (el.textName.value || "").trim() || defaultPastedName();
+        inputs.push({ text_name: name, text: pasted });
+      }
+
+      // Files (optional) — file name is text_name
+      for (const f of state.pendingFiles) {
+        try {
+          const txt = await readFileAsText(f);
+          inputs.push({ text_name: f.name, text: txt });
+        } catch (e) {
+          console.error(e);
+          alert(`Failed to read file: ${f.name}`);
+        }
+      }
+
+      if (inputs.length === 0) {
+        alert("Paste some text and/or add one or more text files first.");
+        return;
+      }
+
+      if (!state.appendSession) {
+        state.session = [];
+        state.selectedIndex = -1;
+      }
+
+      // Add to session
+      for (const inp of inputs) {
+        const base = computeBaseAnalysis(inp.text);
+        state.session.push({
+          id: crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random(),
+          text_name: inp.text_name,
+          text: inp.text,
+          language: base.language,
+          freq: base.freq,
+          metrics: base.metrics
+        });
+      }
+
+      // Clear pending files after ingestion (prevents accidental re-processing)
+      clearPendingFiles();
+      el.fileInput.value = "";
+
+      // Show panels and preview
+      renderSessionPreview();
+
+      // Select the last added item
+      state.selectedIndex = state.session.length - 1;
+      setCurrentSelection(state.selectedIndex);
+    }
+
+    function resetAll() {
+      el.textName.value = "";
+      el.inputText.value = "";
+      el.appendSession.checked = false;
+      el.excludeStopwords.checked = true;
+
+      el.customStopwordsInput.value = "";
+      el.excludeOnRemoveHighlight.checked = false;
+      state.customStopwords.clear();
+      renderCustomStopwords();
+
+      clearPendingFiles();
+      el.fileInput.value = "";
+
+      stopNetwork();
+      el.networkPanel.classList.add("hidden");
+
+      clearSession();
+    }
+
+    // ---------- Wire up ----------
+    el.fileInput.addEventListener("change", (e) => {
+      addPendingFiles(e.target.files);
+      // allow selecting same file again later
+      el.fileInput.value = "";
+    });
+
+    el.clearFilesBtn.addEventListener("click", clearPendingFiles);
+
+    el.goBtn.addEventListener("click", () => run());
+    el.resetBtn.addEventListener("click", resetAll);
+
+    el.excludeStopwords.addEventListener("change", () => {
+      // Updates ranking + session preview (CSV/Copy) and the network (if already built).
+      onWordFiltersChanged();
+    });
+
+    el.addCustomStopwordsBtn.addEventListener("click", () => {
+      const raw = (el.customStopwordsInput.value || "").trim();
+      el.customStopwordsInput.value = "";
+      if (!raw) return;
+      const changed = addCustomStopwordsFromText(raw);
+      if (changed) onWordFiltersChanged();
+      else renderCustomStopwords();
+    });
+
+    el.clearCustomStopwordsBtn.addEventListener("click", () => {
+      if (state.customStopwords.size === 0) return;
+      state.customStopwords.clear();
+      onWordFiltersChanged();
+    });
+
+    el.customStopwordsInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        el.addCustomStopwordsBtn.click();
+      }
+    });
+
+    // initial render
+    renderCustomStopwords();
+
+    el.addTopBtn.addEventListener("click", () => addTopNToHighlightList(el.topNInput.value));
+
+    el.addWordBtn.addEventListener("click", () => {
+      const w = (el.addWordInput.value || "").trim();
+      el.addWordInput.value = "";
+      if (!w) return;
+      addWordToHighlightList(w, true, true);
+    });
+
+    el.addWordInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        el.addWordBtn.click();
+      }
+    });
+
+    el.downloadCsvBtn.addEventListener("click", downloadSessionCSV);
+    el.copyTableBtn.addEventListener("click", copySessionTable);
+    el.clearSessionBtn.addEventListener("click", clearSession);
+    el.buildNetworkBtn.addEventListener("click", buildNetwork);
+    attachNetworkInteractions();
+
+    
+  </script>
+</body>
+</html>
