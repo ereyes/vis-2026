@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Dataset Visualization</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: sans-serif;
+            pointer-events: none;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Loading 900 spheres...</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- Configuration ---
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQxCeBiFD1EqeJZhbAcWmmkEDtP3RjRf5936MVqeHAA1Db1r5RtXRyPXb0qJRiOVAvnk5Rvrflo-e-O/pub?output=csv';
+        const BOUNDS = 20; // The size of the "box" the balls bounce in
+        const BALL_RADIUS = 0.5;
+        const SPEED = 0.1;
+
+        let scene, camera, renderer, balls = [];
+
+        async function init() {
+            // 1. Setup Scene
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 40;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // 2. Add Lighting
+            const light = new THREE.PointLight(0xffffff, 1000);
+            light.position.set(0, 20, 20);
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0x404040));
+
+            // 3. Fetch Data
+            try {
+                const response = await fetch(CSV_URL);
+                const data = await response.text();
+                // Split by newline and comma to get individual values
+                const values = data.split(/[\n,]+/).map(v => v.trim()).filter(v => v.length > 0);
+                
+                document.getElementById('info').innerText = `Visualizing ${values.length} spheres from dataset`;
+                
+                createBalls(values);
+            } catch (error) {
+                console.error("Error loading CSV:", error);
+                document.getElementById('info').innerText = "Error loading data. Check CORS or URL.";
+            }
+
+            animate();
+        }
+
+        function createBalls(dataPoints) {
+            const geometry = new THREE.SphereGeometry(BALL_RADIUS, 16, 16);
+
+            dataPoints.forEach((val) => {
+                // Random Color
+                const color = new THREE.Color(Math.random(), Math.random(), Math.random());
+                const material = new THREE.MeshPhongMaterial({ color: color });
+                const sphere = new THREE.Mesh(geometry, material);
+
+                // Random starting position within bounds
+                sphere.position.set(
+                    (Math.random() - 0.5) * BOUNDS * 2,
+                    (Math.random() - 0.5) * BOUNDS * 2,
+                    (Math.random() - 0.5) * BOUNDS * 2
+                );
+
+                // Random velocity
+                sphere.userData.velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * SPEED,
+                    (Math.random() - 0.5) * SPEED,
+                    (Math.random() - 0.5) * SPEED
+                );
+
+                scene.add(sphere);
+                balls.push(sphere);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            balls.forEach(ball => {
+                // Move
+                ball.position.add(ball.userData.velocity);
+
+                // Bounce Logic (X-axis)
+                if (Math.abs(ball.position.x) > BOUNDS) {
+                    ball.userData.velocity.x *= -1;
+                    ball.position.x = Math.sign(ball.position.x) * BOUNDS;
+                }
+                // Bounce Logic (Y-axis)
+                if (Math.abs(ball.position.y) > BOUNDS) {
+                    ball.userData.velocity.y *= -1;
+                    ball.position.y = Math.sign(ball.position.y) * BOUNDS;
+                }
+                // Bounce Logic (Z-axis)
+                if (Math.abs(ball.position.z) > BOUNDS) {
+                    ball.userData.velocity.z *= -1;
+                    ball.position.z = Math.sign(ball.position.z) * BOUNDS;
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+    </script>
+</body>
+</html>
